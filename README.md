@@ -25,6 +25,19 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **Snapshot management** — list, create (recursive), and delete snapshots
 - **Prometheus metrics** — `GET /metrics` exposes Go runtime and process stats
 
+## Screenshots
+
+<table>
+<tr>
+<td><img src="screenshots/sysinfo.png" width="420" alt="Sysinfo and storage pools"></td>
+<td><img src="screenshots/datasets.png" width="420" alt="Dataset browser"></td>
+</tr>
+<tr>
+<td><img src="screenshots/snapshots.png" width="420" alt="Snapshot management"></td>
+<td><img src="screenshots/edit-dataset.png" width="420" alt="Edit dataset properties"></td>
+</tr>
+</table>
+
 ## Architecture
 
 ### High-level overview
