@@ -13,7 +13,7 @@ I run a [Kobol Helios64](https://wiki.kobol.io/helios64/intro/) as my home NAS �
 
 What I wanted was simple: observe and manage my storage from a browser, on a machine that stays as close to a vanilla Linux or FreeBSD installation as possible. No agents, no daemons-within-daemons, no frameworks that outlive their welcome. Just a single compiled binary, some Ansible playbooks, and a handful of static files.
 
-dumpstore started as exactly that — a thin read-only dashboard — and is growing deliberately from there. The roadmap includes everything a real NAS UI needs: SMB/NFS share management, local user and group administration, fine-grained permissions, and eventually ACL support. Each feature will follow the same philosophy: keep the host clean, keep the code auditable, and let the operating system do the heavy lifting.
+dumpstore started as exactly that — a thin read-only dashboard — and is growing deliberately from there. The roadmap includes everything a real NAS UI needs: SMB/NFS share management, fine-grained permissions, and eventually ACL support. Each feature will follow the same philosophy: keep the host clean, keep the code auditable, and let the operating system do the heavy lifting.
 
 If you run a Helios64, an old server, or any ZFS box where you care about what is actually installed on it, this might be the tool for you.
 
@@ -28,7 +28,9 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **Dataset editing** — update properties in place (set or inherit)
 - **Dataset deletion** — destroy datasets and volumes with recursive option and confirm-by-typing dialog
 - **Snapshot management** — list, create (recursive), and delete snapshots
-- **Live updates** — Server-Sent Events push pool, dataset, snapshot and I/O changes every 10 s; falls back to 30 s REST polling if SSE is unavailable
+- **User management** — list, create, edit (shell, password, primary/supplementary groups), and delete local users; system users (uid < 1000) are visible but protected
+- **Group management** — list, create, edit (name, GID, members), and delete local groups; system groups (gid < 1000) are protected
+- **Live updates** — Server-Sent Events push pool, dataset, snapshot, I/O, user and group changes; server polls every 10 s and pushes only on change; falls back to 30 s REST polling if SSE is unavailable
 - **Prometheus metrics** — `GET /metrics` exposes Go runtime and process stats
 
 ## Screenshots
@@ -80,7 +82,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
       │     │  internal/broker         │            │
       │     │                          │            │
       │     │  Broker — pub/sub core   │◄── StartPoller() goroutine
-      │     │    Subscribe(topic)      │    polls ZFS every 10 s
+      │     │    Subscribe(topic)      │    polls ZFS + users/groups every 10 s
       │     │    Publish(topic, data)  │    publishes only on change
       │     │    Unsubscribe(topic,ch) │    (JSON equality check)
       │     │                          │
@@ -179,6 +181,16 @@ PATCH  /api/datasets/{n}      → zfs_dataset_set.yml       (ansible)
 DELETE /api/datasets/{n}      → zfs_dataset_destroy.yml   (ansible)
 POST   /api/snapshots         → zfs_snapshot_create.yml   (ansible)
 DELETE /api/snapshots/{n}     → zfs_snapshot_destroy.yml  (ansible)
+
+GET    /api/users             → /etc/passwd               (direct)
+POST   /api/users             → user_create.yml           (ansible)
+PUT    /api/users/{name}      → user_modify.yml           (ansible)
+DELETE /api/users/{name}      → user_delete.yml           (ansible)
+
+GET    /api/groups            → /etc/group                (direct)
+POST   /api/groups            → group_create.yml          (ansible)
+PUT    /api/groups/{name}     → group_modify.yml          (ansible)
+DELETE /api/groups/{name}     → group_delete.yml          (ansible)
 ```
 
 ## Requirements
@@ -273,8 +285,8 @@ sudo make uninstall
 │   ├── ansible/runner.go            # Ansible playbook execution + JSON output parsing
 │   ├── api/handlers.go              # REST API handlers + input validation
 │   ├── broker/broker.go             # Thread-safe pub/sub broker (Subscribe/Publish/Unsubscribe)
-│   ├── broker/poller.go             # Background ZFS poller → publishes changes to broker
-│   ├── system/system.go             # Host + process info (/proc, sysctl)
+│   ├── broker/poller.go             # Background poller (ZFS + users/groups) → publishes changes to broker
+│   ├── system/system.go             # Host + process info, ListUsers, ListGroups (/proc, /etc/passwd, /etc/group)
 │   └── smart/smart.go              # S.M.A.R.T. data via smartctl
 ├── playbooks/
 │   ├── inventory/localhost          # Local connection inventory
@@ -282,7 +294,13 @@ sudo make uninstall
 │   ├── zfs_dataset_set.yml          # Update dataset properties (set / inherit)
 │   ├── zfs_dataset_destroy.yml      # Destroy dataset or volume
 │   ├── zfs_snapshot_create.yml      # Create snapshot
-│   └── zfs_snapshot_destroy.yml     # Destroy snapshot
+│   ├── zfs_snapshot_destroy.yml     # Destroy snapshot
+│   ├── user_create.yml              # Create local user
+│   ├── user_modify.yml              # Modify user (shell, groups, password)
+│   ├── user_delete.yml              # Delete user and home directory
+│   ├── group_create.yml             # Create local group
+│   ├── group_modify.yml             # Modify group (name, GID, members)
+│   └── group_delete.yml             # Delete local group
 ├── images/                          # Logo source files (SVG, all variants)
 ├── static/
 │   ├── index.html                   # Single-page application shell + dialogs
@@ -314,6 +332,14 @@ sudo make uninstall
 | DELETE | `/api/datasets/{name}`      | Destroy a dataset or volume           |
 | POST   | `/api/snapshots`            | Create a snapshot                     |
 | DELETE | `/api/snapshots/{name}`     | Destroy a snapshot                    |
+| GET    | `/api/users`                | List local users                      |
+| POST   | `/api/users`                | Create a local user                   |
+| PUT    | `/api/users/{name}`         | Edit user (shell, groups, password)   |
+| DELETE | `/api/users/{name}`         | Delete user and home directory        |
+| GET    | `/api/groups`               | List local groups                     |
+| POST   | `/api/groups`               | Create a local group                  |
+| PUT    | `/api/groups/{name}`        | Edit group (name, GID, members)       |
+| DELETE | `/api/groups/{name}`        | Delete a local group                  |
 
 ### POST /api/datasets
 
@@ -378,12 +404,14 @@ Server-Sent Events stream. The server pushes named events whenever data changes,
 
 **Available topics:**
 
-| Topic            | Data                              | Source                      |
-|------------------|-----------------------------------|-----------------------------|
-| `pool.query`     | Same JSON as `GET /api/pools`     | Pushed every 10 s on change |
-| `dataset.query`  | Same JSON as `GET /api/datasets`  | Pushed every 10 s on change |
-| `snapshot.query` | Same JSON as `GET /api/snapshots` | Pushed every 10 s on change |
-| `iostat`         | Same JSON as `GET /api/iostat`    | Pushed every 10 s always    |
+| Topic            | Data                              | Source                                    |
+|------------------|-----------------------------------|-------------------------------------------|
+| `pool.query`     | Same JSON as `GET /api/pools`     | Pushed every 10 s on change               |
+| `dataset.query`  | Same JSON as `GET /api/datasets`  | Pushed every 10 s on change               |
+| `snapshot.query` | Same JSON as `GET /api/snapshots` | Pushed every 10 s on change               |
+| `iostat`         | Same JSON as `GET /api/iostat`    | Pushed every 10 s always                  |
+| `user.query`     | Same JSON as `GET /api/users`     | Pushed on write op + every 10 s on change |
+| `group.query`    | Same JSON as `GET /api/groups`    | Pushed on write op + every 10 s on change |
 
 Each event follows the SSE wire format:
 
@@ -401,4 +429,14 @@ Example — watch pool health and I/O live:
 curl -N 'http://localhost:8080/api/events?topics=pool.query,iostat'
 ```
 
-The browser UI uses `EventSource` to subscribe to all four topics and falls back to 30 s REST polling automatically if the SSE connection is lost.
+The browser UI uses `EventSource` to subscribe to all six topics and falls back to 30 s REST polling automatically if the SSE connection is lost. User and group topics are also published immediately after any write operation so the UI reflects changes without waiting for the next poll cycle.
+
+## Planned
+
+| Feature                  | Notes                                                        |
+|--------------------------|--------------------------------------------------------------|
+| SMB/NFS share management | Create and manage Samba and NFS exports                      |
+| File browser             | Browse dataset contents, set permissions                     |
+| ACL support              | Fine-grained POSIX and NFSv4 ACL editing                     |
+| ZFS send/receive         | Pool replication and off-site backup                         |
+| Alerts                   | Configurable thresholds for pool health, disk temp, capacity |
