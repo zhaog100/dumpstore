@@ -84,6 +84,12 @@
       register: create_fs
       changed_when: create_fs.rc == 0
 
+    - name: mount filesystem
+      ansible.builtin.command:
+        argv: ['zfs', 'mount', '{{ name }}']
+      when: type == "filesystem" and mountpoint not in ["none", "legacy"]
+      changed_when: false
+
     - name: create volume
       ansible.builtin.command:
         argv: "{{ ['zfs', 'create', '-V', volsize] + vol_opts + [name] }}"
