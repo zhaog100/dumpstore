@@ -587,6 +587,12 @@ func (h *Handler) createUser(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"username": req.Username, "tasks": out.Steps()})
 }
 
+// protectedUsers lists accounts that must never be deleted regardless of UID.
+var protectedUsers = map[string]bool{"nobody": true, "nfsnobody": true}
+
+// protectedGroups lists groups that must never be deleted regardless of GID.
+var protectedGroups = map[string]bool{"nogroup": true, "nobody": true, "nfsnobody": true}
+
 // deleteUser handles DELETE /api/users/{name}
 // Looks up the user's UID and rejects system users (uid < UIDMin).
 func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request) {
@@ -614,6 +620,10 @@ func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 	if target == nil {
 		writeError(w, http.StatusNotFound, fmt.Errorf("user %q not found", name), nil)
+		return
+	}
+	if protectedUsers[name] {
+		writeError(w, http.StatusForbidden, fmt.Errorf("refusing to delete protected user %q", name), nil)
 		return
 	}
 	if target.UID < system.UIDMin() {
@@ -700,6 +710,10 @@ func (h *Handler) deleteGroup(w http.ResponseWriter, r *http.Request) {
 	}
 	if target == nil {
 		writeError(w, http.StatusNotFound, fmt.Errorf("group %q not found", name), nil)
+		return
+	}
+	if protectedGroups[name] {
+		writeError(w, http.StatusForbidden, fmt.Errorf("refusing to delete protected group %q", name), nil)
 		return
 	}
 	if target.GID < system.UIDMin() {

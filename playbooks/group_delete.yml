@@ -13,7 +13,8 @@
           - groupname is defined and groupname != ""
           - gid is defined
           - gid | int >= 1000
-        fail_msg: "groupname is required and gid must be >= 1000 (refusing to delete system groups)"
+          - groupname not in ['nogroup', 'nobody', 'nfsnobody']
+        fail_msg: "groupname is required, gid must be >= 1000, and protected groups (nogroup, nobody, nfsnobody) cannot be deleted"
 
     - name: Delete group
       ansible.builtin.group:
