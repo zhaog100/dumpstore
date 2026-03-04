@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented here.
 
+## [v0.0.4] — 2026-03-04
+
+### Added
+- **Local user management** — list, create, edit, and delete local Unix users via `GET/POST /api/users` and `DELETE /api/users/{name}`
+- **Local group management** — list, create, edit, and delete local Unix groups via `GET/POST /api/groups` and `DELETE /api/groups/{name}`
+- Users & Groups tab in the UI with system-account rows shown muted (no delete button)
+- Type-to-confirm delete dialogs for users and groups
+- Ansible playbooks: `user_create.yml`, `user_delete.yml`, `group_create.yml`, `group_delete.yml`
+- `internal/system/system.go` — parses `/etc/passwd`, `/etc/group`, `/etc/login.defs` for user/group reads
+- SSE topics `user.query` and `group.query` pushed on write ops and every 10 s on change
+
+### Changed
+- `/etc` write operations (useradd/userdel/groupadd/groupdel) protected by a mutex to avoid concurrent modification
+- System accounts (UID/GID < `UID_MIN`) are protected from deletion at both API and playbook level (403)
+- `nobody` / `nogroup` explicitly guarded against deletion regardless of UID/GID
+- README updated with Users & Groups API, SSE topics table, and planned features table
+
 ## [v0.0.3] — 2026-03-04
 
 ### Changed
