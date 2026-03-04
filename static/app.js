@@ -1115,8 +1115,14 @@ function renderACLDialog() {
   if (!d) return;
 
   const typeBadgeACL = t => `<span class="type-badge type-${esc(t)}">${esc(t)}</span>`;
+  const disableBtn = d.acl_type !== 'off'
+    ? `<button class="btn-danger btn-small" id="aclDisable">Disable ACLs</button>`
+    : '';
   document.getElementById('aclDialogMeta').innerHTML =
-    `<p class="acl-meta">Mountpoint: <code>${esc(d.mountpoint || '—')}</code> &nbsp; Type: ${typeBadgeACL(d.acl_type || 'off')}</p>`;
+    `<p class="acl-meta">Mountpoint: <code>${esc(d.mountpoint || '—')}</code> &nbsp; Type: ${typeBadgeACL(d.acl_type || 'off')} ${disableBtn}</p>`;
+  if (disableBtn) {
+    document.getElementById('aclDisable').addEventListener('click', () => disableACLs(d.dataset));
+  }
 
   if (d.acl_type === 'off') {
     document.getElementById('aclDialogEntries').innerHTML = `
@@ -1148,14 +1154,17 @@ function renderPOSIXACLEntries(d) {
     document.getElementById('aclDialogEntries').innerHTML = '<p class="muted">No ACL entries.</p>';
     return;
   }
+  const mandatoryTags = new Set(['user', 'group', 'other']);
   const rows = entries.map(e => {
     const removal = (e.default ? 'default:' : '') + e.tag + (e.qualifier ? ':' + e.qualifier : '');
     const perms = e.perms || '---';
+    const mandatory = !e.default && !e.qualifier && mandatoryTags.has(e.tag);
+    const delBtn = mandatory ? '' : `<button class="btn-del btn-small" data-entry="${esc(removal)}">✕</button>`;
     return `<tr>
       <td>${e.default ? '<span class="type-badge type-volume">default</span> ' : ''}${esc(e.tag)}</td>
       <td>${esc(e.qualifier) || '<span class="muted">—</span>'}</td>
       <td class="acl-perms"><code>${esc(perms.replace(/-/g,'·'))}</code></td>
-      <td><button class="btn-del btn-small" data-entry="${esc(removal)}">✕</button></td>
+      <td>${delBtn}</td>
     </tr>`;
   }).join('');
 
@@ -1378,6 +1387,27 @@ async function enableACLs(dataset, acltype) {
   } catch (err) {
     showOpLog(`Failed to enable ACLs`, err.tasks, err.message);
   }
+}
+
+const disableACLDialog = document.getElementById('disableACLDialog');
+document.getElementById('disableACLCancelBtn').addEventListener('click', () => disableACLDialog.close());
+document.getElementById('disableACLConfirmBtn').addEventListener('click', async () => {
+  const dataset = state.aclDataset;
+  disableACLDialog.close();
+  try {
+    const res = await api('PATCH', `/api/datasets/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`,
+      { acltype: 'off' });
+    showOpLog(`Disabled ACLs — ${dataset}`, res.tasks, null);
+    state.aclData = await api('GET', `/api/acl/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`);
+    renderACLDialog();
+  } catch (err) {
+    showOpLog(`Failed to disable ACLs`, err.tasks, err.message);
+  }
+});
+
+function disableACLs(dataset) {
+  document.getElementById('disableACLDatasetName').textContent = dataset;
+  disableACLDialog.showModal();
 }
 
 // ── XSS helper ────────────────────────────────────────────────────────────────
