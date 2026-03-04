@@ -12,6 +12,9 @@ Group=root
 # Adjust to your install path
 ExecStart=/usr/local/lib/dumpstore/dumpstore -addr :8080 -dir /usr/local/lib/dumpstore
 
+StandardOutput=journal
+StandardError=journal
+
 Restart=on-failure
 RestartSec=5
 
