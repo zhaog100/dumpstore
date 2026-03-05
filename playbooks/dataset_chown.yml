@@ -1,0 +1,40 @@
+---
+# Change owner and/or group of a dataset mountpoint directory.
+#
+# Required extra vars:
+#   mountpoint  - absolute path of the dataset mountpoint (e.g. /tank/data)
+#   owner       - new owner username (required; pass current owner to leave unchanged)
+#   group       - new group name (required; pass current group to leave unchanged)
+# Optional:
+#   recursive   - "true" to apply recursively to all files inside mountpoint (default "false")
+
+- name: Change dataset mountpoint ownership
+  hosts: localhost
+  gather_facts: false
+  vars:
+    recursive: "false"
+  tasks:
+    - name: Assert required vars
+      ansible.builtin.assert:
+        that:
+          - mountpoint is defined and mountpoint != ""
+          - owner is defined and owner != ""
+          - group is defined and group != ""
+          - mountpoint is not search('[;|&$`]')
+          - owner is not search('[;|&$`]')
+          - group is not search('[;|&$`]')
+        fail_msg: "mountpoint, owner, and group are required and must not contain shell-special characters"
+
+    - name: Set ownership (non-recursive)
+      ansible.builtin.command:
+        argv: ["chown", "{{ owner }}:{{ group }}", "{{ mountpoint }}"]
+      when: recursive != "true"
+      register: chown_result
+      changed_when: chown_result.rc == 0
+
+    - name: Set ownership (recursive)
+      ansible.builtin.command:
+        argv: ["chown", "-R", "{{ owner }}:{{ group }}", "{{ mountpoint }}"]
+      when: recursive == "true"
+      register: chown_result_r
+      changed_when: chown_result_r.rc == 0

@@ -234,6 +234,21 @@ func GetDatasetProps(name string) (map[string]DatasetProp, error) {
 	return result, nil
 }
 
+// GetMountpointOwnership returns the owner username and group name of a
+// mountpoint directory by running `stat --format=%U %G <path>`.
+// This is Linux-specific and matches the target platform for the service.
+func GetMountpointOwnership(mountpoint string) (owner, group string, err error) {
+	out, err := run("stat", "--format=%U %G", mountpoint)
+	if err != nil {
+		return "", "", fmt.Errorf("stat %s: %w", mountpoint, err)
+	}
+	parts := strings.Fields(strings.TrimSpace(out))
+	if len(parts) < 2 {
+		return "", "", fmt.Errorf("unexpected stat output: %q", out)
+	}
+	return parts[0], parts[1], nil
+}
+
 // Version returns the OpenZFS version string reported by `zpool version`
 // (e.g. "zfs-2.2.3-1"). Returns an empty string if the command is unavailable.
 func Version() (string, error) {

@@ -452,6 +452,7 @@ function renderDatasets() {
           <div class="row-actions">
             <button class="btn-edit" data-ds="${esc(d.name)}" data-type="${esc(d.type)}">Edit</button>
             ${d.type !== 'volume' ? `<button class="btn-acl btn-small" data-ds="${esc(d.name)}">ACL</button>` : ''}
+            ${d.type === 'filesystem' && d.mountpoint !== 'none' && d.mountpoint !== '-' ? `<button class="btn-chown btn-small" data-ds="${esc(d.name)}">Chown</button>` : ''}
             ${canDelete ? `<button class="btn-del" data-ds="${esc(d.name)}" data-type="${esc(d.type)}">Delete</button>` : ''}
           </div>
         </td>
@@ -491,6 +492,10 @@ function renderDatasets() {
 
   wrap.querySelectorAll('.btn-acl[data-ds]').forEach(btn => {
     btn.addEventListener('click', () => openACLDialog(btn.dataset.ds));
+  });
+
+  wrap.querySelectorAll('.btn-chown[data-ds]').forEach(btn => {
+    btn.addEventListener('click', () => openChownDialog(btn.dataset.ds));
   });
 }
 
@@ -1418,6 +1423,51 @@ function esc(s) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 }
+
+// ── Chown dialog ──────────────────────────────────────────────────────────────
+const chownDialog = document.getElementById('chownDialog');
+document.getElementById('chownCancelBtn').addEventListener('click', () => chownDialog.close());
+
+let _chownDataset = '';
+
+async function openChownDialog(dataset) {
+  _chownDataset = dataset;
+  document.getElementById('chownDatasetLabel').textContent = dataset;
+  document.getElementById('chown-recursive').checked = false;
+
+  // Populate owner/group selects from cached state
+  const ownerSel = document.getElementById('chown-owner');
+  const groupSel = document.getElementById('chown-group');
+  ownerSel.innerHTML = state.users.map(u => `<option value="${esc(u.username)}">${esc(u.username)}</option>`).join('');
+  groupSel.innerHTML = state.groups.map(g => `<option value="${esc(g.name)}">${esc(g.name)}</option>`).join('');
+
+  chownDialog.showModal();
+
+  // Pre-select current owner/group
+  try {
+    const info = await api('GET', `/api/chown/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`);
+    if (info.owner) ownerSel.value = info.owner;
+    if (info.group) groupSel.value = info.group;
+  } catch (err) {
+    toast(`Could not read ownership: ${err.message}`, 'error');
+  }
+}
+
+document.getElementById('chownForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const dataset = _chownDataset;
+  const owner = document.getElementById('chown-owner').value;
+  const group = document.getElementById('chown-group').value;
+  const recursive = document.getElementById('chown-recursive').checked;
+  chownDialog.close();
+  try {
+    const result = await api('POST', `/api/chown/${encodeURIComponent(dataset).replace(/%2F/g, '/')}`,
+      { owner, group, recursive });
+    showOpLog(`Ownership changed: ${dataset}`, result.tasks, null);
+  } catch (err) {
+    showOpLog(`Failed to change ownership of ${dataset}`, err.tasks, err.message);
+  }
+});
 
 // ── SSE client ────────────────────────────────────────────────────────────────
 // Maps SSE topic names → state key + render function.

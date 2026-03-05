@@ -56,6 +56,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/snapshots", h.createSnapshot)
 	mux.HandleFunc("DELETE /api/snapshots/{snapshot...}", h.deleteSnapshot)
 	mux.HandleFunc("GET /api/events", h.getEvents)
+	mux.HandleFunc("GET /api/chown/{dataset...}", h.getDatasetOwnership)
+	mux.HandleFunc("POST /api/chown/{dataset...}", h.setDatasetOwnership)
 	mux.HandleFunc("GET /api/acl/{dataset...}", h.getDatasetACL)
 	mux.HandleFunc("POST /api/acl/{dataset...}", h.setACLEntry)
 	mux.HandleFunc("DELETE /api/acl/{dataset...}", h.removeACLEntry)
@@ -429,6 +431,105 @@ func (h *Handler) deleteSnapshot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, map[string]any{"snapshot": snapshot, "tasks": out.Steps()})
+}
+
+// getDatasetOwnership handles GET /api/chown/{dataset...}
+// Returns the current owner and group of the dataset's mountpoint directory.
+func (h *Handler) getDatasetOwnership(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("dataset")
+	if name == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
+		return
+	}
+	if strings.ContainsAny(name, "@;|&$`") {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in dataset name"), nil)
+		return
+	}
+	props, err := zfs.GetDatasetProps(name)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err, nil)
+		return
+	}
+	mp := props["mountpoint"].Value
+	if mp == "none" || mp == "-" || mp == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset %s has no mountpoint", name), nil)
+		return
+	}
+	owner, group, err := zfs.GetMountpointOwnership(mp)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err, nil)
+		return
+	}
+	writeJSON(w, map[string]string{
+		"dataset":    name,
+		"mountpoint": mp,
+		"owner":      owner,
+		"group":      group,
+	})
+}
+
+// setDatasetOwnership handles POST /api/chown/{dataset...}
+// Body: {"owner":"alice","group":"storage","recursive":false}
+func (h *Handler) setDatasetOwnership(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("dataset")
+	if name == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
+		return
+	}
+	if strings.ContainsAny(name, "@;|&$`") {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in dataset name"), nil)
+		return
+	}
+
+	var req struct {
+		Owner     string `json:"owner"`
+		Group     string `json:"group"`
+		Recursive bool   `json:"recursive"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
+		return
+	}
+	if req.Owner == "" || req.Group == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("owner and group are required"), nil)
+		return
+	}
+	if strings.ContainsAny(req.Owner+req.Group, "@;|&$`") {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in owner or group"), nil)
+		return
+	}
+
+	props, err := zfs.GetDatasetProps(name)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err, nil)
+		return
+	}
+	mp := props["mountpoint"].Value
+	if mp == "none" || mp == "-" || mp == "" {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset %s has no mountpoint", name), nil)
+		return
+	}
+
+	recursive := "false"
+	if req.Recursive {
+		recursive = "true"
+	}
+
+	out, err := h.runner.Run("dataset_chown.yml", map[string]string{
+		"mountpoint": mp,
+		"owner":      req.Owner,
+		"group":      req.Group,
+		"recursive":  recursive,
+	})
+	if err != nil {
+		var steps []ansible.TaskStep
+		if out != nil {
+			steps = out.Steps()
+		}
+		writeError(w, http.StatusInternalServerError, err, steps)
+		return
+	}
+	writeJSON(w, map[string]any{"dataset": name, "tasks": out.Steps()})
 }
 
 // getEvents handles GET /api/events?topics=pool.query,dataset.query,...

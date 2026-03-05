@@ -569,6 +569,27 @@
     </div>
   </dialog>
 
+  <!-- CHOWN DIALOG -->
+  <dialog id="chownDialog">
+    <form id="chownForm" method="dialog">
+      <h3>Change Ownership</h3>
+      <p class="muted" id="chownDatasetLabel" style="margin:0 0 1rem"></p>
+      <label>Owner
+        <select id="chown-owner"></select>
+      </label>
+      <label>Group
+        <select id="chown-group"></select>
+      </label>
+      <label class="checkbox-label" style="margin-top:0.5rem">
+        <input type="checkbox" id="chown-recursive"> Recursive (apply to all files inside)
+      </label>
+      <div class="dialog-actions">
+        <button type="button" id="chownCancelBtn" class="btn-secondary">Cancel</button>
+        <button type="submit" class="btn-primary">Apply</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- OPERATION LOG DIALOG -->
   <dialog id="opLogDialog">
     <h3 id="opLogTitle">Operation Result</h3>
