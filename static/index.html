@@ -17,6 +17,7 @@
         <button class="tab-btn" data-tab="snapshots">Snapshots</button>
         <button class="tab-btn" data-tab="users">Users &amp; Groups</button>
       </nav>
+      <span id="appVersion" class="app-version"></span>
       <button class="refresh-btn" id="refreshBtn" title="Refresh">&#8635;</button>
     </div>
   </header>
@@ -25,18 +26,27 @@
     <!-- POOLS TAB -->
     <section class="tab-pane active" id="tab-pools">
       <div class="section-header">
-        <h2>Storage Pools</h2>
-        <span id="zfsVersionBar" class="zfs-version"></span>
+        <h2>Host</h2>
       </div>
       <div id="sysinfo-wrap" style="margin-bottom:1.5rem"></div>
-      <div id="pools-grid" class="pool-grid">
-        <div class="loading">Loading pools…</div>
+      <div class="section-header" style="margin-top:2rem">
+        <h2>Installed Software</h2>
+      </div>
+      <div id="software-wrap" style="margin-bottom:1.5rem">
+        <div class="loading">Loading…</div>
       </div>
       <div class="section-header" style="margin-top:2rem">
-        <h2>I/O Statistics</h2>
+        <h2>Storage Pools</h2>
       </div>
-      <div id="iostat-table-wrap">
-        <div class="loading">Loading I/O stats…</div>
+      <div class="pools-iostat-wrap">
+        <div id="pools-grid" class="pool-grid">
+          <div class="loading">Loading pools…</div>
+        </div>
+        <div class="iostat-aside">
+          <div id="iostat-table-wrap">
+            <div class="loading">Loading I/O stats…</div>
+          </div>
+        </div>
       </div>
       <div class="section-header" style="margin-top:2rem">
         <h2>Disk Health</h2>

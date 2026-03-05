@@ -106,6 +106,13 @@ func UIDMin() int {
 	return 1000
 }
 
+// SoftwareTool holds the name and detected version of an external tool.
+// Version is empty when the tool is not found (rendered as N/A in the UI).
+type SoftwareTool struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+}
+
 // Info holds a snapshot of host and process statistics.
 type Info struct {
 	// Host
@@ -126,6 +133,9 @@ type Info struct {
 	SysMB          float64 `json:"sys_mb"`
 	Goroutines     int     `json:"goroutines"`
 	NumGC          uint32  `json:"num_gc"`
+
+	// External software
+	Software []SoftwareTool `json:"software"`
 }
 
 // Get collects and returns current system and process information.
@@ -150,6 +160,7 @@ func Get() Info {
 		NumGC:          ms.NumGC,
 	}
 	info.Load1, info.Load5, info.Load15 = loadAverages()
+	info.Software = softwareVersions()
 	return info
 }
 
@@ -225,4 +236,62 @@ func runCmd(name string, args ...string) (string, error) {
 		return "", err
 	}
 	return buf.String(), nil
+}
+
+// probeVersion runs cmd with args and returns the first non-empty line of
+// combined stdout+stderr. Returns "" if the binary is not found.
+func probeVersion(cmd string, args ...string) string {
+	if _, err := exec.LookPath(cmd); err != nil {
+		return ""
+	}
+	var out bytes.Buffer
+	c := exec.Command(cmd, args...)
+	c.Stdout = &out
+	c.Stderr = &out
+	c.Run() // ignore exit code — many tools exit non-zero for --version
+	for _, line := range strings.Split(out.String(), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			return line
+		}
+	}
+	return "installed"
+}
+
+// probePresence returns "installed" if cmd is found in PATH, "" otherwise.
+func probePresence(cmd string) string {
+	if _, err := exec.LookPath(cmd); err != nil {
+		return ""
+	}
+	return "installed"
+}
+
+// detectPkgManager returns the name+version of the first known package manager found.
+func detectPkgManager() string {
+	managers := []struct{ cmd, varg string }{
+		{"apt", "--version"},
+		{"dnf", "--version"},
+		{"yum", "--version"},
+		{"pacman", "--version"},
+		{"zypper", "--version"},
+		{"apk", "--version"},
+	}
+	for _, m := range managers {
+		if v := probeVersion(m.cmd, m.varg); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func softwareVersions() []SoftwareTool {
+	return []SoftwareTool{
+		{Name: "ZFS", Version: probeVersion("zfs", "version")},
+		{Name: "Ansible", Version: probeVersion("ansible-playbook", "--version")},
+		{Name: "Python", Version: probeVersion("python3", "--version")},
+		{Name: "smartctl", Version: probeVersion("smartctl", "--version")},
+		{Name: "nfs4-acl-tools", Version: probePresence("nfs4_setfacl")},
+		{Name: "setfacl (ACL)", Version: probePresence("setfacl")},
+		{Name: "Package manager", Version: detectPkgManager()},
+	}
 }

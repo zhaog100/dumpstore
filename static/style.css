@@ -112,9 +112,15 @@ main {
 }
 
 /* POOL CARDS */
+.pools-iostat-wrap {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  align-items: flex-start;
+}
 .pool-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: 1fr;
   gap: 1rem;
 }
 .pool-card {
@@ -206,13 +212,18 @@ main {
 }
 .load-mid  { color: var(--yellow); }
 .load-high { color: var(--red); }
+.sw-na { color: var(--text-muted); }
 
-/* ZFS VERSION */
-.zfs-version {
+/* Header version badge */
+.app-version {
+  margin-left: auto;
   font-size: 11px;
   color: var(--text-muted);
-  margin-left: auto;
+  font-family: var(--font);
+  white-space: nowrap;
 }
+
+/* ZFS VERSION */
 
 /* POOL CARD EXTRAS */
 .pool-scan {
@@ -258,9 +269,7 @@ main {
 .vdev-name {
   flex: 1;
   color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  word-break: break-all;
   font-family: var(--font);
 }
 .vdev-state { font-weight: 600; min-width: 52px; font-size: 10px; }
@@ -613,7 +622,7 @@ dialog label select:focus { border-color: var(--accent); }
 .temp-crit { color: var(--red); }
 
 /* IOSTAT TABLE */
-#iostat-table-wrap table { width: auto; min-width: 500px; }
+#iostat-table-wrap table { width: 100%; }
 
 /* DELETE DATASET DIALOG */
 .btn-danger {

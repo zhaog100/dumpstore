@@ -135,6 +135,7 @@ async function loadAll() {
     state.groups = groups || [];
     renderPools();
     renderSysInfo();
+    renderSoftware();
     renderDatasets();
     renderSnapshots();
     renderIOStat();
@@ -170,6 +171,10 @@ function renderSysInfo() {
   const loadClass = s.load1 > s.cpu_count * 0.9 ? 'load-high'
                   : s.load1 > s.cpu_count * 0.6 ? 'load-mid' : '';
 
+  // Header version badge
+  const verBadge = document.getElementById('appVersion');
+  if (verBadge && s.app_version) verBadge.textContent = s.app_version;
+
   wrap.innerHTML = `
     <div class="sysinfo-card">
       <div class="sysinfo-section-label">Host</div>
@@ -193,20 +198,35 @@ function renderSysInfo() {
     </div>`;
 }
 
+// ── Render: Software ──────────────────────────────────────────────────────────
+function renderSoftware() {
+  const wrap = document.getElementById('software-wrap');
+  if (!wrap) return;
+  const tools = state.sysinfo?.software;
+  if (!tools?.length) { wrap.innerHTML = ''; return; }
+
+  const rows = tools.map(t => {
+    const na = !t.version;
+    return `<tr>
+      <td class="mono">${esc(t.name)}</td>
+      <td class="${na ? 'sw-na' : 'mono'}">${na ? 'N/A' : esc(t.version)}</td>
+    </tr>`;
+  }).join('');
+
+  wrap.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Tool</th><th>Version / Status</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
 // ── Render: Pools ─────────────────────────────────────────────────────────────
 function renderPools() {
   const grid = document.getElementById('pools-grid');
 
-  // Version bar
-  const verEl = document.getElementById('zfsVersionBar');
-  if (verEl) {
-    const parts = [];
-    if (state.sysinfo?.app_version) parts.push(`dumpstore ${esc(state.sysinfo.app_version)}`);
-    if (state.version) parts.push(`OpenZFS ${esc(state.version)}`);
-    verEl.textContent = parts.join(' · ');
-  }
-
-  if (!state.pools.length) {
+if (!state.pools.length) {
     grid.innerHTML = '<div class="loading">No pools found.</div>';
     return;
   }
