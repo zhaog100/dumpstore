@@ -62,5 +62,7 @@ Do not change this split without a good reason — it exists to avoid Ansible's 
 | `static/index.html` | Page shell, dialogs (new dataset, new snapshot) |
 | `static/app.js` | State, fetch, render functions for pools/datasets/snapshots/iostat, dialog wiring |
 | `static/style.css` | Dark monospace theme, CSS variables in `:root` |
-| `dumpstore.service` | systemd unit; binary at `/usr/local/lib/dumpstore/dumpstore` |
+| `contrib/dumpstore.service` | systemd unit; binary at `/usr/local/lib/dumpstore/dumpstore` |
+| `contrib/dumpstore.rc` | FreeBSD rc.d script |
+| `install.sh` | Standalone install/uninstall script (wraps build + service setup) |
 | `Makefile` | `build`, `install` (copies binary + playbooks + static, enables service), `uninstall`, `clean` |

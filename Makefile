@@ -33,11 +33,11 @@ install: build
 	cp -r playbooks $(INSTALL)/
 	cp -r static    $(INSTALL)/
 ifeq ($(OS),Linux)
-	install -m 0644 dumpstore.service $(SYSTEMD_SERVICE)
+	install -m 0644 contrib/dumpstore.service $(SYSTEMD_SERVICE)
 	systemctl daemon-reload
 	systemctl enable --now dumpstore
 else ifeq ($(OS),FreeBSD)
-	install -m 0555 dumpstore.rc $(RC_SERVICE)
+	install -m 0555 contrib/dumpstore.rc $(RC_SERVICE)
 	sysrc dumpstore_enable=YES
 	service dumpstore start
 else

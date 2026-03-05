@@ -247,6 +247,24 @@ The version is exposed in:
 
 ## Build & Install
 
+### Using the install script (recommended)
+
+Clone the repository and run `install.sh` as root. It checks prerequisites, builds the binary, installs everything to `/usr/local/lib/dumpstore/`, and registers the service.
+
+```bash
+git clone https://github.com/langerma/dumpstore.git
+cd dumpstore
+sudo ./install.sh
+```
+
+To remove dumpstore completely:
+
+```bash
+sudo ./install.sh --uninstall
+```
+
+### Using make
+
 `make install` detects the OS automatically and registers the appropriate service.
 
 ```bash
@@ -335,8 +353,10 @@ sudo make uninstall
 │   ├── app.js                       # Vanilla JS frontend, no dependencies
 │   ├── style.css                    # Dark monospace theme
 │   └── images/                      # Logos served by the HTTP file server
-├── dumpstore.service                # systemd unit file (Linux)
-├── dumpstore.rc                     # rc.d script (FreeBSD)
+├── contrib/
+│   ├── dumpstore.service            # systemd unit file (Linux)
+│   └── dumpstore.rc                 # rc.d script (FreeBSD)
+├── install.sh                       # Standalone build-and-install script (Linux & FreeBSD)
 └── Makefile                         # OS-aware build / install / uninstall
 ```
 
