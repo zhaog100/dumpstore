@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented here.
 
+## [v0.0.9] — 2026-03-06
+
+### Added
+- **NFS share management** — per-dataset NFS sharing via the ZFS `sharenfs` property; NFS button on each filesystem dataset row opens a dialog showing the current share options, with Share and Disable actions; button highlights with accent colour when sharing is active, tooltip shows the current options string
+- `sharenfs` property readable via `GET /api/dataset-props/{name}` and writable via `PATCH /api/datasets/{name}`; backed by `zfs_dataset_set.yml`
+- `publishDatasets()` — dataset list is pushed to all SSE subscribers immediately after any property change, so the NFS button state updates in real time across all open tabs
+- `ShareNFS` field on the `Dataset` struct; `sharenfs` column included in `ListDatasets` so SSE carries NFS state without an extra round-trip
+- **Installed Software** — "NFS server" row added to the Sysinfo tab; probes `exportfs` on Linux and `mountd` on FreeBSD
+- **Requirements** — NFS server packages (`nfs-kernel-server` / `nfs-utils`) documented in README requirements table and install snippets
+
 ## [v0.0.8] — 2026-03-06
 
 ### Added
