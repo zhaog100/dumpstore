@@ -33,11 +33,11 @@ jobs:
 
             mkdir -p dist/${NAME}
             cp dumpstore dist/${NAME}/
-            cp -r playbooks static README.md dist/${NAME}/
+            cp -r playbooks static README.md install.sh dist/${NAME}/
 
             case "$OS" in
-              linux)   cp dumpstore.service dist/${NAME}/ ;;
-              freebsd) cp dumpstore.rc      dist/${NAME}/ ;;
+              linux)   cp contrib/dumpstore.service dist/${NAME}/ ;;
+              freebsd) cp contrib/dumpstore.rc      dist/${NAME}/ ;;
             esac
 
             tar -czf dist/${NAME}.tar.gz -C dist ${NAME}
