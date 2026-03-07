@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented here.
 
+## [v0.1.0] — 2026-03-07
+
+### Added
+- **SMB share management** — per-dataset Samba usershares via `net usershare add/delete`; SMB button on each filesystem dataset row opens a dialog showing the current share name, with Share and Remove actions; button highlights when sharing is active
+- `GET /api/smb-shares` — lists all active usershares (name → path mapping)
+- `POST /api/smb-share/{dataset}` / `DELETE /api/smb-share/{dataset}` — create and remove usershares backed by `smb_usershare_set.yml` / `smb_usershare_unset.yml`
+- **Samba user management** — `GET/POST/DELETE /api/smb-users/{name}` registers and removes users from the tdbsam database (`smbpasswd -a` / `pdbedit -x`); Samba users panel in the UI lists registered users with add and remove actions
+- **One-click Samba setup** — `POST /api/smb-config/pam` runs `smb_setup.yml` which configures the usershares directory, removes the `[homes]` section so home directories are not shared by default, and enables PAM passthrough on Linux; cross-platform: auto-detects Linux vs FreeBSD and sets the correct `smb.conf` path, usershares directory, and service names
+
+### Fixed
+- Samba setup no longer leaves `[homes]` enabled — home directories are explicitly removed from `smb.conf` so they are never shared by default
+- `smb_setup.yml` is now cross-platform: Linux uses `/etc/samba/smb.conf` + `smbd`/`nmbd`; FreeBSD uses `/usr/local/etc/smb4.conf` + `samba_server`
+
 ## [v0.0.9] — 2026-03-06
 
 ### Added
