@@ -73,8 +73,8 @@
       until: user_result is not failed
       changed_when: user_result.changed
 
-    - name: Register user with Samba (smbpasswd -a)
-      ansible.builtin.shell:
+    - name: Register user with Samba smbpasswd
+      ansible.builtin.command:
         cmd: "smbpasswd -a -s {{ username | quote }}"
         stdin: "{{ password }}\n{{ password }}\n"
       no_log: true

@@ -361,27 +361,6 @@ func probeNFSServer() string {
 	return probePresence("exportfs")
 }
 
-// probeSambaZFSVFS returns "installed" when a Samba ZFS VFS module (.so) is
-// found in a well-known library path. Shipped by samba-vfs-modules on Debian/
-// Ubuntu/RHEL; required for ZFS ACL passthrough via sharesmb.
-func probeSambaZFSVFS() string {
-	candidates := []string{
-		"/usr/lib/x86_64-linux-gnu/samba/vfs/zfsacl.so",
-		"/usr/lib/aarch64-linux-gnu/samba/vfs/zfsacl.so",
-		"/usr/lib64/samba/vfs/zfsacl.so",
-		"/usr/lib/samba/vfs/zfsacl.so",
-		"/usr/lib/x86_64-linux-gnu/samba/vfs/zfs_core.so",
-		"/usr/lib64/samba/vfs/zfs_core.so",
-		"/usr/lib/samba/vfs/zfs_core.so",
-	}
-	for _, p := range candidates {
-		if _, err := os.Stat(p); err == nil {
-			return "installed"
-		}
-	}
-	return ""
-}
-
 func softwareVersions() []SoftwareTool {
 	return []SoftwareTool{
 		{Name: "ZFS", Version: probeVersion("zfs", "version")},
@@ -392,7 +371,6 @@ func softwareVersions() []SoftwareTool {
 		{Name: "nfs4-acl-tools", Version: probePresence("nfs4_setfacl")},
 		{Name: "setfacl (ACL)", Version: probePresence("setfacl")},
 		{Name: "Samba (smbd)", Version: probeVersion("smbd", "--version")},
-		{Name: "samba-vfs-modules", Version: probeSambaZFSVFS()},
 		{Name: "Package manager", Version: detectPkgManager()},
 	}
 }

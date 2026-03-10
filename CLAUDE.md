@@ -15,7 +15,7 @@ No external Go dependencies. Standard library only.
 `zpool`/`zfs` CLI commands are called directly via `exec.Command` for low latency. No Ansible for reads.
 
 **Write ops → Ansible playbooks**
-Create/destroy operations go through `ansible-playbook` with `ANSIBLE_STDOUT_CALLBACK=json`. The runner in `internal/ansible/runner.go` parses the JSON callback output to extract task results.
+Create/destroy operations go through `ansible-playbook` with `ANSIBLE_STDOUT_CALLBACK=ndjson` (custom callback plugin at `playbooks/callback_plugins/ndjson.py`). The runner in `internal/ansible/runner.go` parses the ndjson output to extract task results.
 
 Do not change this split without a good reason — it exists to avoid Ansible's Python startup overhead on every API call.
 

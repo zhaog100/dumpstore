@@ -59,7 +59,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 │  state object → render functions → api() helper                     │
 │                                                                     │
 │  ┌─ boot ──────────────────────────────────────────────────────┐    │
-│  │  loadAll() → 8 parallel REST fetches (initial paint)        │    │
+│  │  loadAll() → 12 parallel REST fetches (initial paint)       │    │
 │  │  startSSE() → EventSource /api/events?topics=…              │    │
 │  │    on message: state[key] = data; render()                  │    │
 │  │    on close:   fallback to setInterval(loadAll, 30 000)     │    │
@@ -95,8 +95,10 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
       │
       ├─── READ requests                    WRITE requests ───────────┐
       │  pools, datasets, snapshots,      create / edit / destroy     │
-      │  iostat, status, props,           datasets and snapshots      │
-      │  sysinfo, SMART, metrics                                      │
+      │  iostat, status, props,           datasets, snapshots,        │
+      │  sysinfo, SMART, metrics,         users, groups, ACLs,        │
+      │  users, groups, ACLs,             SMB users/shares/config,    │
+      │  SMB users/shares, chown          dataset chown               │
       │                                                               │
       ▼                                                               ▼
 ┌───────────────────────┐                        ┌────────────────────────────┐
@@ -108,15 +110,20 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 │  ListDatasets()       │                        │    -i inventory/localhost  │
 │  ListSnapshots()      │                        │    --extra-vars '{...}'    │
 │  IOStats()            │                        │  env: ANSIBLE_STDOUT_      │
-│  GetDatasetProps()    │                        │    CALLBACK=json           │
+│  GetDatasetProps()    │                        │    CALLBACK=ndjson         │
 │  GetDatasetACL()      │                        │                            │
-│  PoolStatuses()       │                        │                            │
-│  Version()            │                        │  parse JSON output         │
-│  system.Get()         │                        │  → []TaskStep              │
+│  GetMountpointOwner() │                        │                            │
+│  PoolStatuses()       │                        │  parse ndjson output       │
+│  Version()            │                        │  → []TaskStep              │
+│  system.Get()         │                        │  streams live via SSE      │
+│  system.ListUsers()   │                        │                            │
+│  system.ListGroups()  │                        │                            │
+│  system.ListSamba*()  │                        │                            │
 │  smart.Collect()      │                        │                            │
 │                       │                        │                            │
 │  exec: zpool / zfs /  │                        │                            │
-│  smartctl / sysctl    │                        │                            │
+│  smartctl / sysctl /  │                        │                            │
+│  pdbedit / net        │                        │                            │
 │  (no Python startup)  │                        │                            │
 └──────────┬────────────┘                        └────────────┬───────────────┘
            │                                                  │
@@ -126,7 +133,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
                                                       │  targets: localhost  │
                                                       │  gather_facts: false │
                                                       │  1. assert vars      │
-                                                      │  2. zfs/zpool cmd    │
+                                                      │  2. mutating command │
                                                       └──────────────────────┘
 ```
 
@@ -136,7 +143,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 |-----------------|------------------------------------|--------------------------------------|
 | **Mechanism**   | `exec.Command(zpool/zfs/smartctl)` | `exec.Command(ansible-playbook)`.    |
 | **Latency**     | Fast — no Python startup           | ~1-2 s — acceptable for mutations    |
-| **Output**      | Parsed from tab-separated stdout   | Parsed from structured JSON callback |
+| **Output**      | Parsed from tab-separated stdout   | Parsed from ndjson callback output   |
 | **Audit trail** | None needed                        | Task names + changed/failed per step |
 | **Idempotency** | N/A                                | Enforced by playbook assert tasks    |
 
@@ -152,7 +159,7 @@ handlers.go: createSnapshot()
   ▼
 runner.go: Run("zfs_snapshot_create.yml", vars)
   │  marshal vars → --extra-vars '{"dataset":"tank/data",...}'
-  │  set ANSIBLE_STDOUT_CALLBACK=json
+  │  set ANSIBLE_STDOUT_CALLBACK=ndjson
   ▼
 ansible-playbook (subprocess)
   │  assert: dataset defined, no bad chars
@@ -196,6 +203,9 @@ POST   /api/groups            → group_create.yml          (ansible)
 PUT    /api/groups/{name}     → group_modify.yml          (ansible)
 DELETE /api/groups/{name}     → group_delete.yml          (ansible)
 
+GET    /api/chown/{dataset}   → stat(mountpoint)          (direct)
+POST   /api/chown/{dataset}   → dataset_chown.yml         (ansible)
+
 GET    /api/acl-status         → getfacl / acltype         (direct)
 GET    /api/acl/{dataset}     → getfacl / nfs4_getfacl    (direct)
 POST   /api/acl/{dataset}     → acl_set_posix.yml         (ansible)
@@ -222,7 +232,7 @@ POST   /api/smb-config/pam    → smb_setup.yml             (ansible)
 | S.M.A.R.T. (optional)  | `smartmontools`                                           | `smartmontools` pkg                          |
 | POSIX ACLs (optional)  | `acl` pkg (`getfacl`/`setfacl`)                           | `py311-pylibacl` or `acl` port               |
 | NFS sharing (optional) | `nfs-kernel-server` (Debian) or `nfs-utils` (RHEL/Fedora) | built-in base system                         |
-| SMB sharing (optional) | `samba` (`smbd`, `net`, `pdbedit`)                         | `samba` pkg                                  |
+| SMB sharing (optional) | `samba` (`smbd`, `net`, `pdbedit`); for ZFS ACL passthrough via `sharesmb` also install `samba-vfs-modules` (Debian/Ubuntu) or `samba-vfs` (RHEL/Fedora) | `samba` pkg |
 | NFSv4 ACLs (optional)  | `nfs4-acl-tools` pkg (`nfs4_getfacl`/`nfs4_setfacl`)      | `nfs4-acl-tools` port                        |
 | Build                  | Go 1.22+                                                  | Go 1.22+                                     |
 
@@ -419,6 +429,8 @@ sudo make uninstall
 | POST   | `/api/groups`               | Create a local group                  |
 | PUT    | `/api/groups/{name}`        | Edit group (name, GID, members)       |
 | DELETE | `/api/groups/{name}`        | Delete a local group                  |
+| GET    | `/api/chown/{dataset}`      | Get mountpoint owner and group        |
+| POST   | `/api/chown/{dataset}`      | Set mountpoint owner and/or group     |
 | GET    | `/api/acl-status`           | ACL presence map (dataset → bool)     |
 | GET    | `/api/acl/{dataset}`        | Get ACL entries for a dataset         |
 | POST   | `/api/acl/{dataset}`        | Add or modify an ACL entry            |
