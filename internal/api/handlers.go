@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -16,6 +17,62 @@ import (
 	"dumpstore/internal/system"
 	"dumpstore/internal/zfs"
 )
+
+// Input validation: whitelist regexes are stricter than a denylist and eliminate
+// entire classes of injection (newlines, glob expansion, shell metacharacters, etc.).
+
+var (
+	// reZFSName matches a valid ZFS dataset/pool path: pool or pool/a/b/c
+	// Components: letters, digits, underscore, hyphen, period, colon.
+	reZFSName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.:-]*(/[a-zA-Z0-9][a-zA-Z0-9_.:-]*)*$`)
+
+	// reSnapLabel matches the label part of a snapshot name (after the '@').
+	reSnapLabel = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.:-]*$`)
+
+	// reUnixName matches a valid POSIX username or group name.
+	reUnixName = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9._-]{0,31}$`)
+
+	// reSMBShare matches a valid SMB share name (max 80 chars).
+	reSMBShare = regexp.MustCompile(`^[a-zA-Z0-9._-]{1,80}$`)
+
+	// reShellPath matches a safe absolute filesystem path.
+	reShellPath = regexp.MustCompile(`^/[a-zA-Z0-9/_.-]+$`)
+)
+
+// validZFSName returns true if s is a safe ZFS dataset/pool path (no snapshot suffix).
+func validZFSName(s string) bool { return reZFSName.MatchString(s) }
+
+// validSnapLabel returns true if s is a safe snapshot label (the part after '@').
+func validSnapLabel(s string) bool { return reSnapLabel.MatchString(s) }
+
+// validUnixName returns true if s is a valid POSIX username or group name.
+func validUnixName(s string) bool { return reUnixName.MatchString(s) }
+
+// validSMBShare returns true if s is a valid SMB share name.
+func validSMBShare(s string) bool { return reSMBShare.MatchString(s) }
+
+// validShellPath returns true if s is a safe absolute path.
+func validShellPath(s string) bool { return reShellPath.MatchString(s) }
+
+// safePropertyValue returns true if s contains no shell-dangerous or control
+// characters. Used for dataset property values which are legitimately complex
+// (e.g. sharenfs="rw=@10.0.0.0/24") and cannot be matched with a simple whitelist.
+func safePropertyValue(s string) bool {
+	return !strings.ContainsAny(s, ";\n\r`|&$*()?!~{}\\\"'")
+}
+
+// validUnixNameList returns true if s is empty or a comma-separated list of valid POSIX names.
+func validUnixNameList(s string) bool {
+	if s == "" {
+		return true
+	}
+	for _, name := range strings.Split(s, ",") {
+		if !validUnixName(strings.TrimSpace(name)) {
+			return false
+		}
+	}
+	return true
+}
 
 // apiError is returned as JSON for all non-2xx responses.
 // Tasks is populated for Ansible-backed operations so the UI can show the op-log
@@ -136,8 +193,8 @@ func (h *Handler) getDatasetProps(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
 		return
 	}
-	if strings.ContainsAny(name, "@;|&$`") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in dataset name"), nil)
+	if !validZFSName(name) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
 		return
 	}
 	props, err := zfs.GetDatasetProps(name)
@@ -159,12 +216,8 @@ func (h *Handler) setDatasetProps(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
 		return
 	}
-	if strings.Contains(name, "@") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in dataset name"), nil)
-		return
-	}
-	if strings.ContainsAny(name, ";|&$`") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in dataset name"), nil)
+	if !validZFSName(name) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
 		return
 	}
 
@@ -186,7 +239,7 @@ func (h *Handler) setDatasetProps(w http.ResponseWriter, r *http.Request) {
 		if !allowedSet[prop] {
 			continue
 		}
-		if strings.ContainsAny(val, ";|&$`") {
+		if !safePropertyValue(val) {
 			writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in value for %s", prop), nil)
 			return
 		}
@@ -247,10 +300,18 @@ func (h *Handler) createDataset(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("volsize is required for volumes"), nil)
 		return
 	}
-	allFields := req.Name + req.VolSize + req.VolBlockSize + req.Compression +
-		req.Quota + req.Mountpoint + req.RecordSize + req.Atime +
+	if !validZFSName(req.Name) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
+		return
+	}
+	if req.Mountpoint != "" && !validShellPath(req.Mountpoint) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid mountpoint path"), nil)
+		return
+	}
+	propFields := req.VolSize + req.VolBlockSize + req.Compression +
+		req.Quota + req.RecordSize + req.Atime +
 		req.Exec + req.Sync + req.Dedup + req.Copies + req.Xattr
-	if strings.ContainsAny(allFields, "@;|&$`") {
+	if !safePropertyValue(propFields) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in request"), nil)
 		return
 	}
@@ -329,8 +390,12 @@ func (h *Handler) createSnapshot(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset and snapname are required"), nil)
 		return
 	}
-	if strings.ContainsAny(req.Dataset+req.SnapName, "@;|&$`") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in dataset or snapname"), nil)
+	if !validZFSName(req.Dataset) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
+		return
+	}
+	if !validSnapLabel(req.SnapName) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid snapshot label"), nil)
 		return
 	}
 
@@ -372,16 +437,12 @@ func (h *Handler) deleteDataset(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
 		return
 	}
-	if strings.Contains(name, "@") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("use DELETE /api/snapshots to delete snapshots"), nil)
+	if !validZFSName(name) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
 		return
 	}
 	if !strings.Contains(name, "/") {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("refusing to destroy a pool root"), nil)
-		return
-	}
-	if strings.ContainsAny(name, ";|&$`") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in dataset name"), nil)
 		return
 	}
 
@@ -413,12 +474,9 @@ func (h *Handler) deleteSnapshot(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("snapshot path required"), nil)
 		return
 	}
-	if !strings.Contains(snapshot, "@") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("snapshot must contain '@'"), nil)
-		return
-	}
-	if strings.ContainsAny(snapshot, ";|&$`") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in snapshot name"), nil)
+	parts := strings.SplitN(snapshot, "@", 2)
+	if len(parts) != 2 || !validZFSName(parts[0]) || !validSnapLabel(parts[1]) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid snapshot name (expected dataset@label)"), nil)
 		return
 	}
 
@@ -451,8 +509,8 @@ func (h *Handler) getDatasetOwnership(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
 		return
 	}
-	if strings.ContainsAny(name, "@;|&$`") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in dataset name"), nil)
+	if !validZFSName(name) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
 		return
 	}
 	props, err := zfs.GetDatasetProps(name)
@@ -486,8 +544,8 @@ func (h *Handler) setDatasetOwnership(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
 		return
 	}
-	if strings.ContainsAny(name, "@;|&$`") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in dataset name"), nil)
+	if !validZFSName(name) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
 		return
 	}
 
@@ -504,8 +562,8 @@ func (h *Handler) setDatasetOwnership(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("owner and group are required"), nil)
 		return
 	}
-	if strings.ContainsAny(req.Owner+req.Group, "@;|&$`") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in owner or group"), nil)
+	if !validUnixName(req.Owner) || !validUnixName(req.Group) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid owner or group name"), nil)
 		return
 	}
 
@@ -675,8 +733,8 @@ func (h *Handler) setSMBShare(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
 		return
 	}
-	if strings.ContainsAny(dataset, "@;|&$`") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in dataset name"), nil)
+	if !validZFSName(dataset) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
 		return
 	}
 	var req struct {
@@ -690,8 +748,8 @@ func (h *Handler) setSMBShare(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("sharename is required"), nil)
 		return
 	}
-	if strings.ContainsAny(req.Sharename, "@;|&$` \t") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in sharename"), nil)
+	if !validSMBShare(req.Sharename) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid sharename"), nil)
 		return
 	}
 	out, err := h.runner.Run("smb_usershare_set.yml", map[string]string{
@@ -722,8 +780,8 @@ func (h *Handler) deleteSMBShare(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("name query parameter required"), nil)
 		return
 	}
-	if strings.ContainsAny(sharename, "@;|&$` \t") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in sharename"), nil)
+	if !validSMBShare(sharename) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid sharename"), nil)
 		return
 	}
 	out, err := h.runner.Run("smb_usershare_unset.yml", map[string]string{
@@ -767,8 +825,8 @@ func (h *Handler) addSambaUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("username required"), nil)
 		return
 	}
-	if strings.ContainsAny(name, "@;|&$`") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in username"), nil)
+	if !validUnixName(name) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid username"), nil)
 		return
 	}
 	var req struct {
@@ -806,8 +864,8 @@ func (h *Handler) removeSambaUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("username required"), nil)
 		return
 	}
-	if strings.ContainsAny(name, "@;|&$`") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in username"), nil)
+	if !validUnixName(name) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid username"), nil)
 		return
 	}
 	h.userMu.Lock()
@@ -865,8 +923,20 @@ func (h *Handler) createUser(w http.ResponseWriter, r *http.Request) {
 	if req.Shell == "" {
 		req.Shell = "/bin/bash"
 	}
-	if strings.ContainsAny(req.Username+req.Shell+req.Group+req.Groups, ";|&$`") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in request"), nil)
+	if !validUnixName(req.Username) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid username"), nil)
+		return
+	}
+	if !validShellPath(req.Shell) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid shell path"), nil)
+		return
+	}
+	if req.Group != "" && !validUnixName(req.Group) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid group name"), nil)
+		return
+	}
+	if !validUnixNameList(req.Groups) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid supplementary group name"), nil)
 		return
 	}
 
@@ -919,8 +989,8 @@ func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("username required"), nil)
 		return
 	}
-	if strings.ContainsAny(name, "@;|&$`") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in username"), nil)
+	if !validUnixName(name) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid username"), nil)
 		return
 	}
 
@@ -975,8 +1045,8 @@ func (h *Handler) modifyUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("username required"), nil)
 		return
 	}
-	if strings.ContainsAny(name, "@;|&$`") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in username"), nil)
+	if !validUnixName(name) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid username"), nil)
 		return
 	}
 	var req struct {
@@ -989,8 +1059,16 @@ func (h *Handler) modifyUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
 		return
 	}
-	if strings.ContainsAny(req.Shell+req.Group+req.UserGroups, ";|&$`") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in request"), nil)
+	if req.Shell != "" && !validShellPath(req.Shell) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid shell path"), nil)
+		return
+	}
+	if req.Group != "" && !validUnixName(req.Group) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid group name"), nil)
+		return
+	}
+	if !validUnixNameList(req.UserGroups) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid supplementary group name"), nil)
 		return
 	}
 
@@ -1056,8 +1134,8 @@ func (h *Handler) createGroup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("groupname is required"), nil)
 		return
 	}
-	if strings.ContainsAny(req.Groupname, "@;|&$`") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in groupname"), nil)
+	if !validUnixName(req.Groupname) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid group name"), nil)
 		return
 	}
 
@@ -1089,8 +1167,8 @@ func (h *Handler) deleteGroup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("groupname required"), nil)
 		return
 	}
-	if strings.ContainsAny(name, "@;|&$`") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in groupname"), nil)
+	if !validUnixName(name) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid group name"), nil)
 		return
 	}
 
@@ -1145,8 +1223,8 @@ func (h *Handler) modifyGroup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("groupname required"), nil)
 		return
 	}
-	if strings.ContainsAny(name, "@;|&$`") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in groupname"), nil)
+	if !validUnixName(name) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid group name"), nil)
 		return
 	}
 	var req struct {
@@ -1158,8 +1236,12 @@ func (h *Handler) modifyGroup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
 		return
 	}
-	if strings.ContainsAny(req.NewName+req.Members, "@;|&$`") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in request"), nil)
+	if req.NewName != "" && !validUnixName(req.NewName) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid new group name"), nil)
+		return
+	}
+	if !validUnixNameList(req.Members) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid member name"), nil)
 		return
 	}
 
@@ -1283,8 +1365,8 @@ func (h *Handler) getDatasetACL(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
 		return
 	}
-	if strings.ContainsAny(name, "@;|&$`") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in dataset name"), nil)
+	if !validZFSName(name) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
 		return
 	}
 	acl, err := zfs.GetDatasetACL(name)
@@ -1305,8 +1387,8 @@ func (h *Handler) setACLEntry(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
 		return
 	}
-	if strings.ContainsAny(name, "@;|&$`") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in dataset name"), nil)
+	if !validZFSName(name) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
 		return
 	}
 
@@ -1384,8 +1466,8 @@ func (h *Handler) removeACLEntry(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("dataset name required"), nil)
 		return
 	}
-	if strings.ContainsAny(name, "@;|&$`") {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid characters in dataset name"), nil)
+	if !validZFSName(name) {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
 		return
 	}
 
