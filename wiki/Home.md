@@ -8,7 +8,7 @@ No container runtime, no database, no Node.js. Just a single compiled binary, so
 
 - **System info** — hostname, OS, kernel, CPU, uptime, load averages, process stats
 - **Pool overview** — health badges, usage bars, fragmentation, deduplication ratio, vdev tree
-- **Pool scrub management** — trigger scrubs, cancel running scrubs, view last scrub time/status/progress per pool
+- **Pool scrub management** — trigger scrubs, cancel running scrubs, view last scrub time/status/progress per pool; configure periodic scrub schedules (Linux: `zfsutils-linux`; FreeBSD: `periodic.conf`)
 - **I/O statistics** — live read/write IOPS and bandwidth per pool
 - **Disk health** — S.M.A.R.T. data per drive (temperature, power-on hours, reallocated sectors, pending sectors, uncorrectable errors)
 - **Dataset browser** — depth-indented collapsible tree, compression, quota, mountpoint; ACL, NFS, and SMB buttons light up when configured

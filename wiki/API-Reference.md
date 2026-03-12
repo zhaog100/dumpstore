@@ -45,6 +45,9 @@ All endpoints are served at `http://<host>:8080`. The API is JSON-over-HTTP; all
 | POST   | `/api/smb-config/pam`       | Run Samba setup playbook |
 | POST   | `/api/scrub/{pool}`         | Start a pool scrub |
 | DELETE | `/api/scrub/{pool}`         | Cancel a running pool scrub |
+| GET    | `/api/scrub-schedules`      | List periodic scrub schedule config |
+| PUT    | `/api/scrub-schedule/{pool}`| Add pool to periodic scrub schedule |
+| DELETE | `/api/scrub-schedule/{pool}`| Remove pool from periodic scrub schedule |
 
 ---
 
@@ -122,6 +125,35 @@ Start a scrub on the named pool. Returns Ansible task steps.
 ### DELETE /api/scrub/{pool}
 
 Cancel a running scrub on the named pool. Returns Ansible task steps.
+
+### GET /api/scrub-schedules
+
+Returns the current periodic scrub configuration for all pools.
+
+```json
+{
+  "mode": "zfsutils",
+  "schedules": [
+    { "pool": "tank" }
+  ]
+}
+```
+
+`mode` is `"zfsutils"` on Linux (managed via `ZFS_SCRUB_POOLS` in `/etc/default/zfs`) or `"periodic"` on FreeBSD (managed via `daily_scrub_zfs_pools` in `/etc/periodic.conf`). On FreeBSD, `threshold_days` is also returned (default 35). An empty `schedules` array means all pools are scrubbed by the platform default.
+
+### PUT /api/scrub-schedule/{pool}
+
+Add a pool to the periodic scrub schedule. On FreeBSD, an optional `threshold_days` body field sets how many days must elapse before a scrub is triggered.
+
+```json
+{ "threshold_days": 35 }
+```
+
+Returns Ansible task steps.
+
+### DELETE /api/scrub-schedule/{pool}
+
+Remove a pool from the periodic scrub schedule. Returns Ansible task steps.
 
 ---
 

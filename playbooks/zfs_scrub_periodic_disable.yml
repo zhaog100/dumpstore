@@ -1,0 +1,41 @@
+---
+# Required extra vars:
+#   pool - pool name to remove from the scrub list (e.g. tank)
+#
+# Removes pool from daily_scrub_zfs_pools in /etc/periodic.conf.
+# Does not touch daily_scrub_zfs_enable or the threshold.
+- name: Disable periodic ZFS scrub for pool
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Validate input
+      ansible.builtin.assert:
+        that:
+          - pool is defined and pool != ""
+          - pool is not search("/")
+          - pool is not search("@")
+        fail_msg: "pool must be a valid pool name (no slashes or @)"
+
+    - name: Read current pool list
+      ansible.builtin.shell: |
+        if grep -qE '^daily_scrub_zfs_pools=' /etc/periodic.conf 2>/dev/null; then
+          grep -E '^daily_scrub_zfs_pools=' /etc/periodic.conf | \
+            sed 's/^daily_scrub_zfs_pools="\(.*\)"/\1/'
+        else
+          echo ""
+        fi
+      register: current_pools
+      changed_when: false
+
+    - name: Compute new pool list
+      ansible.builtin.set_fact:
+        new_pool_list: >-
+          {{ current_pools.stdout.split() | reject('equalto', pool) | join(' ') }}
+
+    - name: Write updated pool list
+      ansible.builtin.lineinfile:
+        path: /etc/periodic.conf
+        regexp: '^#?daily_scrub_zfs_pools='
+        line: 'daily_scrub_zfs_pools="{{ new_pool_list }}"'
+        create: true
+        mode: '0644'
