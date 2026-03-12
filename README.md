@@ -585,11 +585,16 @@ The browser UI uses `EventSource` to subscribe to all six topics and falls back 
 
 | Feature                  | Notes                                                                                         |
 |--------------------------|-----------------------------------------------------------------------------------------------|
-| Snapshot rollback        | Roll a dataset back to a snapshot with confirm dialog; destroys newer snapshots               |
 | Dataset rename           | Rename a dataset or volume in place                                                           |
 | Snapshot clone           | Create a new dataset from an existing snapshot                                                |
-| ~~NFS share management~~ | ~~List, create, and remove NFS exports~~ — **done** (ZFS `sharenfs` property; cross-platform)         |
-| ~~SMB share management~~ | ~~List, create, and remove Samba shares~~ — **done** (`net usershare`; Samba user management; setup playbook) |
-| File browser             | Browse dataset contents, set permissions                                                      |
+| Auto-snapshot scheduling | Hourly/daily/weekly/monthly rotation policies; built-in scheduler (sanoid-style)              |
+| Pool scrub management    | Trigger scrubs, view last scrub time/status/progress, schedule periodic scrubs                |
+| ZFS native encryption    | Load/unload keys, show encryption status per dataset, support keyformat/keylocation           |
+| iSCSI target management  | Expose zvols as iSCSI targets (targetcli on Linux, ctld on FreeBSD)                           |
+| Pool import/export       | Import available pools from attached devices; export pools safely                             |
+| Snapshot diff            | Show files changed between two snapshots (`zfs diff`)                                         |
+| Per-user quota tracking  | Show space usage per user/group (`zfs userspace` / `zfs groupspace`)                          |
 | ZFS send/receive         | Pool replication and off-site backup                                                          |
 | Alerts                   | Configurable thresholds for pool health, disk temp, capacity                                  |
+| ~~NFS share management~~ | ~~List, create, and remove NFS exports~~ — **done** (ZFS `sharenfs` property; cross-platform)         |
+| ~~SMB share management~~ | ~~List, create, and remove Samba shares~~ — **done** (`net usershare`; Samba user management; setup playbook) |
