@@ -724,6 +724,39 @@
     </form>
   </dialog>
 
+  <!-- SCRUB SCHEDULE DIALOG -->
+  <dialog id="scrubScheduleDialog">
+    <h3>Scrub Schedule &mdash; <span id="scrubSchedulePool"></span></h3>
+    <div class="dialog-body">
+      <!-- unused placeholder; kept so JS getElementById calls don't throw -->
+      <div id="scrubCronRows" style="display:none"></div>
+      <!-- Linux (zfsutils-linux): status text only, no configurable schedule -->
+      <div id="scrubZfsutilsRow">
+        <p id="scrubZfsutilsStatus" class="muted" style="margin:0 0 0.5rem"></p>
+        <p class="muted" style="margin:0 0 1rem;font-size:0.85rem">
+          Managed via <code>ZFS_SCRUB_POOLS</code> in <code>/etc/default/zfs</code>.
+          Scrubs run on the 2nd Sunday of each month via <code>zfsutils-linux</code>.
+        </p>
+      </div>
+      <!-- FreeBSD: periodic threshold field -->
+      <div id="scrubPeriodicRow" style="display:none">
+        <div class="form-row">
+          <label for="scrubScheduleThreshold">Scrub every (days)</label>
+          <input type="number" id="scrubScheduleThreshold" min="1" max="365" value="35">
+        </div>
+        <p class="muted" style="margin:0 0 1rem;font-size:0.85rem">
+          Managed via <code>daily_scrub_zfs_pools</code> in <code>/etc/periodic.conf</code>.
+          The periodic task runs daily and scrubs if the threshold has elapsed.
+        </p>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" id="scrubScheduleSaveBtn" class="btn-primary">Enable</button>
+        <button type="button" id="scrubScheduleRemoveBtn" class="btn-danger">Remove</button>
+        <button type="button" id="scrubScheduleCancelBtn" class="btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </dialog>
+
   <!-- OPERATION LOG DIALOG -->
   <dialog id="opLogDialog">
     <h3 id="opLogTitle">Operation Result</h3>

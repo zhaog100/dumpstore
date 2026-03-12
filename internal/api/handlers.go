@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -145,6 +146,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/smb-share/{dataset...}", h.deleteSMBShare)
 	mux.HandleFunc("POST /api/scrub/{pool}", h.startScrub)
 	mux.HandleFunc("DELETE /api/scrub/{pool}", h.cancelScrub)
+	mux.HandleFunc("GET /api/scrub-schedules", h.listScrubSchedules)
+	mux.HandleFunc("PUT /api/scrub-schedule/{pool}", h.setScrubSchedule)
+	mux.HandleFunc("DELETE /api/scrub-schedule/{pool}", h.deleteScrubSchedule)
 }
 
 func (h *Handler) getSysInfo(w http.ResponseWriter, r *http.Request) {
@@ -1587,6 +1591,94 @@ func (h *Handler) cancelScrub(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out, err := h.runOp("zfs_scrub_cancel.yml", map[string]string{"pool": pool})
+	if err != nil {
+		var steps []ansible.TaskStep
+		if out != nil {
+			steps = out.Steps()
+		}
+		writeError(w, http.StatusInternalServerError, err, steps)
+		return
+	}
+	writeJSON(w, map[string]any{"pool": pool, "tasks": out.Steps()})
+}
+
+// listScrubSchedules handles GET /api/scrub-schedules
+// Returns mode + schedules from the platform cron source (Linux) or
+// /etc/periodic.conf (FreeBSD).
+func (h *Handler) listScrubSchedules(w http.ResponseWriter, r *http.Request) {
+	list, err := zfs.ScrubSchedules()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Errorf("reading scrub schedules: %w", err), nil)
+		return
+	}
+	writeJSON(w, list)
+}
+
+// setScrubSchedule handles PUT /api/scrub-schedule/{pool}
+// Linux:   adds pool to ZFS_SCRUB_POOLS in /etc/default/zfs.
+// FreeBSD: adds pool to daily_scrub_zfs_pools in /etc/periodic.conf and sets
+//
+//	the scrub threshold (threshold_days, default 35).
+func (h *Handler) setScrubSchedule(w http.ResponseWriter, r *http.Request) {
+	pool := r.PathValue("pool")
+	if pool == "" || !validZFSName(pool) || strings.Contains(pool, "/") {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid pool name"), nil)
+		return
+	}
+
+	if zfs.OSType() == "freebsd" {
+		var req struct {
+			ThresholdDays int `json:"threshold_days"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req) // threshold_days optional
+		if req.ThresholdDays <= 0 {
+			req.ThresholdDays = 35
+		}
+		out, err := h.runOp("zfs_scrub_periodic_enable.yml", map[string]string{
+			"pool":           pool,
+			"threshold_days": strconv.Itoa(req.ThresholdDays),
+		})
+		if err != nil {
+			var steps []ansible.TaskStep
+			if out != nil {
+				steps = out.Steps()
+			}
+			writeError(w, http.StatusInternalServerError, err, steps)
+			return
+		}
+		writeJSON(w, map[string]any{"pool": pool, "tasks": out.Steps()})
+		return
+	}
+
+	// Linux: add to ZFS_SCRUB_POOLS — no schedule params required.
+	out, err := h.runOp("zfs_scrub_zfsutils_enable.yml", map[string]string{"pool": pool})
+	if err != nil {
+		var steps []ansible.TaskStep
+		if out != nil {
+			steps = out.Steps()
+		}
+		writeError(w, http.StatusInternalServerError, err, steps)
+		return
+	}
+	writeJSON(w, map[string]any{"pool": pool, "tasks": out.Steps()})
+}
+
+// deleteScrubSchedule handles DELETE /api/scrub-schedule/{pool}
+// Linux:   removes pool from ZFS_SCRUB_POOLS in /etc/default/zfs.
+// FreeBSD: removes pool from daily_scrub_zfs_pools in /etc/periodic.conf.
+func (h *Handler) deleteScrubSchedule(w http.ResponseWriter, r *http.Request) {
+	pool := r.PathValue("pool")
+	if pool == "" || !validZFSName(pool) || strings.Contains(pool, "/") {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid pool name"), nil)
+		return
+	}
+
+	playbook := "zfs_scrub_zfsutils_disable.yml"
+	if zfs.OSType() == "freebsd" {
+		playbook = "zfs_scrub_periodic_disable.yml"
+	}
+
+	out, err := h.runOp(playbook, map[string]string{"pool": pool})
 	if err != nil {
 		var steps []ansible.TaskStep
 		if out != nil {

@@ -22,6 +22,9 @@ const state = {
   aclStatus: {},
   hideSystemUsers: true,
   hideSystemGroups: true,
+  scrubSchedules: {},      // pool name → ScrubSchedule
+  scrubScheduleMode: 'cron',    // "cron" | "periodic"
+  scrubThresholdDays: 35,       // FreeBSD periodic threshold (global)
 };
 
 // ── API helpers ───────────────────────────────────────────────────────────────
@@ -149,7 +152,7 @@ function setRefreshing(v) {
 async function loadAll() {
   setRefreshing(true);
   try {
-    const [pools, poolStatuses, version, sysinfo, datasets, snapshots, users, groups, smbData, smbShares] = await Promise.all([
+    const [pools, poolStatuses, version, sysinfo, datasets, snapshots, users, groups, smbData, smbShares, scrubSchedules] = await Promise.all([
       api('GET', '/api/pools').catch(() => []),
       api('GET', '/api/poolstatus').catch(() => []),
       api('GET', '/api/version').catch(() => null),
@@ -160,6 +163,7 @@ async function loadAll() {
       api('GET', '/api/groups').catch(() => []),
       api('GET', '/api/smb-users').catch(() => null),
       api('GET', '/api/smb-shares').catch(() => []),
+      api('GET', '/api/scrub-schedules').catch(() => []),
     ]);
     state.pools = pools || [];
     state.poolStatuses = poolStatuses || [];
@@ -172,6 +176,10 @@ async function loadAll() {
     state.sambaAvailable = smbData?.available ?? false;
     state.sambaUsers = smbData?.users || [];
     state.smbShares = smbShares || [];
+    const schedData = scrubSchedules || { mode: 'cron', schedules: [] };
+    state.scrubScheduleMode = schedData.mode || 'cron';
+    state.scrubThresholdDays = schedData.threshold_days || 35;
+    state.scrubSchedules = Object.fromEntries((schedData.schedules || []).map(s => [s.pool, s]));
     renderPools();
     renderSysInfo();
     renderSoftware();
@@ -297,12 +305,21 @@ if (!state.pools.length) {
       ? `<div class="pool-scan">${esc(detail.scan)}</div>`
       : '';
 
+    const sched = state.scrubSchedules[p.name];
+    const allDefault = Object.keys(state.scrubSchedules).length === 0;
+    const badgeText = fmtScrubScheduleBadge(state.scrubScheduleMode, !!sched, allDefault, state.scrubThresholdDays);
+    const schedBadge = badgeText
+      ? `<span class="scrub-schedule-badge">${esc(badgeText)}</span>`
+      : `<span class="scrub-schedule-badge muted">No schedule</span>`;
+
     const scrubActions = `
       <div class="pool-scrub-actions">
         ${scrubState === 'in_progress' || scrubState === 'paused'
           ? `<button class="btn-secondary btn-sm" onclick="cancelScrub('${p.name}')">Cancel Scrub</button>`
           : `<button class="btn-secondary btn-sm" onclick="startScrub('${p.name}')">Start Scrub</button>`
         }
+        <button class="btn-secondary btn-sm" onclick="openScrubScheduleDialog('${p.name}')">Schedule&hellip;</button>
+        ${schedBadge}
       </div>`;
 
     const statusLine = detail?.status
@@ -402,6 +419,85 @@ async function cancelScrub(pool) {
     await loadAll();
   } catch (err) {
     showOpLog(`Cancel scrub: ${pool}`, err.tasks, err.message);
+  }
+}
+
+// ── Scrub schedule helpers ────────────────────────────────────────────────────
+// Returns badge text, or null if pool has no schedule.
+// allDefault = the pools list is empty (platform scrubs all pools by default).
+function fmtScrubScheduleBadge(mode, inList, allDefault, thresholdDays) {
+  if (!inList && !allDefault) return null;
+  if (mode === 'periodic') return `Scrub: every ${thresholdDays ?? 35}d`;
+  return 'Scrub: 2nd Sun'; // zfsutils-linux
+}
+
+let _scrubSchedulePool = '';
+
+function openScrubScheduleDialog(pool) {
+  _scrubSchedulePool = pool;
+  const sched = state.scrubSchedules[pool];
+  const periodic = state.scrubScheduleMode === 'periodic';
+  const allDefault = Object.keys(state.scrubSchedules).length === 0;
+  document.getElementById('scrubSchedulePool').textContent = pool;
+
+  document.getElementById('scrubCronRows').style.display = 'none'; // unused
+  document.getElementById('scrubPeriodicRow').style.display = periodic ? '' : 'none';
+  document.getElementById('scrubZfsutilsRow').style.display = periodic ? 'none' : '';
+
+  if (periodic) {
+    document.getElementById('scrubScheduleThreshold').value = state.scrubThresholdDays ?? 35;
+  } else {
+    const statusEl = document.getElementById('scrubZfsutilsStatus');
+    if (allDefault) {
+      statusEl.textContent = 'All pools are scrubbed on the 2nd Sunday monthly (ZFS_SCRUB_POOLS is empty — package default).';
+    } else if (sched) {
+      statusEl.textContent = 'Pool is explicitly listed in ZFS_SCRUB_POOLS.';
+    } else {
+      statusEl.textContent = 'Pool is not in ZFS_SCRUB_POOLS and will not be scrubbed automatically.';
+    }
+  }
+
+  document.getElementById('scrubScheduleSaveBtn').textContent = sched ? 'Update' : 'Enable';
+  document.getElementById('scrubScheduleRemoveBtn').style.display = sched ? '' : 'none';
+  document.getElementById('scrubScheduleDialog').showModal();
+}
+
+async function _refreshScrubSchedules() {
+  const data = await api('GET', '/api/scrub-schedules').catch(() => null);
+  if (data) {
+    state.scrubScheduleMode = data.mode || 'zfsutils';
+    state.scrubThresholdDays = data.threshold_days || 35;
+    state.scrubSchedules = Object.fromEntries((data.schedules || []).map(s => [s.pool, s]));
+    renderPools();
+  }
+}
+
+async function saveScrubSchedule() {
+  const body = state.scrubScheduleMode === 'periodic'
+    ? { threshold_days: parseInt(document.getElementById('scrubScheduleThreshold').value, 10) || 35 }
+    : {};
+  document.getElementById('scrubScheduleDialog').close();
+  showOpLogRunning(`Enable scrub: ${_scrubSchedulePool}`);
+  try {
+    const data = await api('PUT', `/api/scrub-schedule/${encodeURIComponent(_scrubSchedulePool)}`, body);
+    showOpLog(`Enable scrub: ${_scrubSchedulePool}`, data.tasks, null);
+    toast(`Scrub enabled for ${_scrubSchedulePool}`, 'ok');
+    await _refreshScrubSchedules();
+  } catch (err) {
+    showOpLog(`Enable scrub: ${_scrubSchedulePool}`, err.tasks, err.message);
+  }
+}
+
+async function removeScrubSchedule() {
+  document.getElementById('scrubScheduleDialog').close();
+  showOpLogRunning(`Remove scrub: ${_scrubSchedulePool}`);
+  try {
+    const data = await api('DELETE', `/api/scrub-schedule/${encodeURIComponent(_scrubSchedulePool)}`);
+    showOpLog(`Remove scrub: ${_scrubSchedulePool}`, data.tasks, null);
+    toast(`Scrub schedule removed for ${_scrubSchedulePool}`, 'ok');
+    await _refreshScrubSchedules();
+  } catch (err) {
+    showOpLog(`Remove scrub: ${_scrubSchedulePool}`, err.tasks, err.message);
   }
 }
 
@@ -1999,6 +2095,11 @@ function startSSE() {
     }
   };
 }
+
+// ── Scrub schedule dialog wiring ──────────────────────────────────────────────
+document.getElementById('scrubScheduleSaveBtn').addEventListener('click', saveScrubSchedule);
+document.getElementById('scrubScheduleRemoveBtn').addEventListener('click', removeScrubSchedule);
+document.getElementById('scrubScheduleCancelBtn').addEventListener('click', () => document.getElementById('scrubScheduleDialog').close());
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 // Perform an immediate REST load so the UI is populated on first paint,
