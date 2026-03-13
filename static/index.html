@@ -138,16 +138,7 @@
           <input type="text" id="ds-volsize" name="volsize" placeholder="e.g. 10G, 500M">
         </label>
         <label>Block size
-          <select id="ds-volblocksize" name="volblocksize">
-            <option value="">— inherit —</option>
-            <option value="512">512 B</option>
-            <option value="4K">4 K</option>
-            <option value="8K">8 K</option>
-            <option value="16K">16 K (databases)</option>
-            <option value="32K">32 K</option>
-            <option value="64K">64 K</option>
-            <option value="128K">128 K</option>
-          </select>
+          <select id="ds-volblocksize" name="volblocksize"></select>
         </label>
         <label class="checkbox-label">
           <input type="checkbox" id="ds-sparse" name="sparse">
@@ -159,19 +150,7 @@
       <fieldset class="form-section ds-fs-only" id="ds-fs-section">
         <legend>Filesystem</legend>
         <label>Record size
-          <select id="ds-recordsize" name="recordsize">
-            <option value="">— inherit (128K) —</option>
-            <option value="512">512 B</option>
-            <option value="4K">4 K</option>
-            <option value="8K">8 K (databases)</option>
-            <option value="16K">16 K</option>
-            <option value="32K">32 K</option>
-            <option value="64K">64 K</option>
-            <option value="128K">128 K (default)</option>
-            <option value="256K">256 K</option>
-            <option value="512K">512 K</option>
-            <option value="1M">1 M (media)</option>
-          </select>
+          <select id="ds-recordsize" name="recordsize"></select>
         </label>
         <label>Quota
           <input type="text" id="ds-quota" name="quota" placeholder="e.g. 50G (blank = none)">
@@ -186,60 +165,26 @@
         <legend>Properties</legend>
         <div class="form-grid">
           <label>Compression
-            <select id="ds-compression" name="compression">
-              <option value="">— inherit —</option>
-              <option value="lz4" selected>lz4</option>
-              <option value="zstd">zstd</option>
-              <option value="gzip">gzip</option>
-              <option value="off">off</option>
-            </select>
+            <select id="ds-compression" name="compression"></select>
           </label>
           <label>Sync
-            <select id="ds-sync" name="sync">
-              <option value="">— inherit —</option>
-              <option value="standard">standard</option>
-              <option value="always">always</option>
-              <option value="disabled">disabled</option>
-            </select>
+            <select id="ds-sync" name="sync"></select>
           </label>
           <label>Access time
-            <select id="ds-atime" name="atime">
-              <option value="">— inherit —</option>
-              <option value="on">on</option>
-              <option value="off">off</option>
-            </select>
+            <select id="ds-atime" name="atime"></select>
           </label>
           <label>Exec
-            <select id="ds-exec" name="exec">
-              <option value="">— inherit —</option>
-              <option value="on">on</option>
-              <option value="off">off</option>
-            </select>
+            <select id="ds-exec" name="exec"></select>
           </label>
           <label>Copies
-            <select id="ds-copies" name="copies">
-              <option value="">— inherit —</option>
-              <option value="1">1</option>
-              <option value="2">2</option>
-              <option value="3">3</option>
-            </select>
+            <select id="ds-copies" name="copies"></select>
           </label>
           <label>Extended attrs
-            <select id="ds-xattr" name="xattr">
-              <option value="">— inherit —</option>
-              <option value="on">on</option>
-              <option value="sa">sa (kernel)</option>
-              <option value="off">off</option>
-            </select>
+            <select id="ds-xattr" name="xattr"></select>
           </label>
         </div>
         <label class="dedup-label">Dedup
-          <select id="ds-dedup" name="dedup">
-            <option value="">— inherit —</option>
-            <option value="off">off</option>
-            <option value="on">on</option>
-            <option value="verify">verify</option>
-          </select>
+          <select id="ds-dedup" name="dedup"></select>
           <span class="field-note">⚠ Dedup is memory-intensive. Requires ~5 GB RAM per TB.</span>
         </label>
       </fieldset>
@@ -285,68 +230,29 @@
         <legend>Properties</legend>
         <div class="form-grid">
           <label>Compression
-            <select id="edit-ds-compression">
-              <option value="">— inherit —</option>
-              <option value="lz4">lz4</option>
-              <option value="zstd">zstd</option>
-              <option value="gzip">gzip</option>
-              <option value="on">on</option>
-              <option value="off">off</option>
-            </select>
+            <select id="edit-ds-compression"></select>
           </label>
           <label>Sync
-            <select id="edit-ds-sync">
-              <option value="">— inherit —</option>
-              <option value="standard">standard</option>
-              <option value="always">always</option>
-              <option value="disabled">disabled</option>
-            </select>
+            <select id="edit-ds-sync"></select>
           </label>
           <label>Access time
-            <select id="edit-ds-atime">
-              <option value="">— inherit —</option>
-              <option value="on">on</option>
-              <option value="off">off</option>
-            </select>
+            <select id="edit-ds-atime"></select>
           </label>
           <label>Exec
-            <select id="edit-ds-exec">
-              <option value="">— inherit —</option>
-              <option value="on">on</option>
-              <option value="off">off</option>
-            </select>
+            <select id="edit-ds-exec"></select>
           </label>
           <label>Copies
-            <select id="edit-ds-copies">
-              <option value="">— inherit —</option>
-              <option value="1">1</option>
-              <option value="2">2</option>
-              <option value="3">3</option>
-            </select>
+            <select id="edit-ds-copies"></select>
           </label>
           <label>Extended attrs
-            <select id="edit-ds-xattr">
-              <option value="">— inherit —</option>
-              <option value="on">on</option>
-              <option value="sa">sa (kernel)</option>
-              <option value="off">off</option>
-            </select>
+            <select id="edit-ds-xattr"></select>
           </label>
           <label>Read-only
-            <select id="edit-ds-readonly">
-              <option value="">— inherit —</option>
-              <option value="on">on</option>
-              <option value="off">off</option>
-            </select>
+            <select id="edit-ds-readonly"></select>
           </label>
         </div>
         <label class="dedup-label">Dedup
-          <select id="edit-ds-dedup">
-            <option value="">— inherit —</option>
-            <option value="off">off</option>
-            <option value="on">on</option>
-            <option value="verify">verify</option>
-          </select>
+          <select id="edit-ds-dedup"></select>
           <span class="field-note">⚠ Dedup is memory-intensive. Requires ~5 GB RAM per TB.</span>
         </label>
       </fieldset>
@@ -354,19 +260,7 @@
       <fieldset class="form-section" id="edit-ds-fs-section">
         <legend>Filesystem</legend>
         <label>Record size
-          <select id="edit-ds-recordsize">
-            <option value="">— inherit —</option>
-            <option value="512">512 B</option>
-            <option value="4K">4 K</option>
-            <option value="8K">8 K (databases)</option>
-            <option value="16K">16 K</option>
-            <option value="32K">32 K</option>
-            <option value="64K">64 K</option>
-            <option value="128K">128 K (default)</option>
-            <option value="256K">256 K</option>
-            <option value="512K">512 K</option>
-            <option value="1M">1 M (media)</option>
-          </select>
+          <select id="edit-ds-recordsize"></select>
         </label>
         <label>Quota
           <input type="text" id="edit-ds-quota" placeholder="e.g. 50G — blank to inherit">
@@ -434,12 +328,7 @@
             title="Letters, numbers, dots, dashes, underscores only">
         </label>
         <label>Shell
-          <select id="user-shell">
-            <option value="/bin/bash">/bin/bash</option>
-            <option value="/bin/sh">/bin/sh</option>
-            <option value="/sbin/nologin">/sbin/nologin</option>
-            <option value="/usr/sbin/nologin">/usr/sbin/nologin</option>
-          </select>
+          <select id="user-shell"></select>
         </label>
         <label>UID <span class="field-note">(leave blank to auto-assign)</span>
           <input type="number" id="user-uid" min="1000" placeholder="auto">
@@ -483,12 +372,7 @@
       <fieldset class="form-section">
         <legend>Identity</legend>
         <label>Shell
-          <select id="edit-user-shell">
-            <option value="/bin/bash">/bin/bash</option>
-            <option value="/bin/sh">/bin/sh</option>
-            <option value="/sbin/nologin">/sbin/nologin</option>
-            <option value="/usr/sbin/nologin">/usr/sbin/nologin</option>
-          </select>
+          <select id="edit-user-shell"></select>
         </label>
       </fieldset>
       <fieldset class="form-section">

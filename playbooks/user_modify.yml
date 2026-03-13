@@ -3,10 +3,10 @@
 #   username - login name of the user to modify
 #   uid      - current UID of the user (must be >= 1000, validated in Go before calling)
 # Optional extra vars:
-#   shell        - new login shell
+#   shell         - new login shell
 #   primary_group - new primary group name (must already exist)
-#   user_groups  - comma-separated supplementary groups (replaces existing; empty = clear all)
-#   password     - pre-hashed password string (e.g. from openssl passwd -6); empty = no change
+#   user_groups   - comma-separated supplementary groups (replaces existing; empty = clear all)
+#   password      - pre-hashed password string (e.g. from openssl passwd -6); empty = no change
 
 - name: Modify local user
   hosts: localhost

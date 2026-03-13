@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -14,6 +15,7 @@ import (
 
 	"dumpstore/internal/ansible"
 	"dumpstore/internal/broker"
+	"dumpstore/internal/schema"
 	"dumpstore/internal/smart"
 	"dumpstore/internal/system"
 	"dumpstore/internal/zfs"
@@ -149,6 +151,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/scrub-schedules", h.listScrubSchedules)
 	mux.HandleFunc("PUT /api/scrub-schedule/{pool}", h.setScrubSchedule)
 	mux.HandleFunc("DELETE /api/scrub-schedule/{pool}", h.deleteScrubSchedule)
+	mux.HandleFunc("GET /api/schema", h.getSchema)
 }
 
 func (h *Handler) getSysInfo(w http.ResponseWriter, r *http.Request) {
@@ -241,7 +244,7 @@ func (h *Handler) setDatasetProps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	allowed := []string{"compression", "quota", "mountpoint", "recordsize", "atime", "exec", "sync", "dedup", "copies", "xattr", "readonly", "acltype", "sharenfs", "sharesmb"}
+	allowed := schema.AllowedNames()
 	allowedSet := make(map[string]bool, len(allowed))
 	for _, p := range allowed {
 		allowedSet[p] = true
@@ -1688,4 +1691,14 @@ func (h *Handler) deleteScrubSchedule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{"pool": pool, "tasks": out.Steps()})
+}
+
+// getSchema handles GET /api/schema
+// Returns property definitions and system metadata filtered for the current OS.
+func (h *Handler) getSchema(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]any{
+		"os":                 runtime.GOOS,
+		"dataset_properties": schema.ForOS(runtime.GOOS),
+		"user_shells":        system.ListShells(),
+	})
 }
