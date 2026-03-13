@@ -1,0 +1,55 @@
+name: Docs check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+jobs:
+  check-docs:
+    runs-on: ubuntu-latest
+    # Skip if the PR is labeled 'skip-docs-check' (for pure refactors, bug fixes, etc.)
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-docs-check') }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for code changes without doc updates
+        run: |
+          BASE=${{ github.event.pull_request.base.sha }}
+          HEAD=${{ github.event.pull_request.head.sha }}
+
+          CHANGED=$(git diff --name-only "$BASE" "$HEAD")
+
+          # Detect if any code/playbook/frontend files changed
+          CODE_CHANGED=$(echo "$CHANGED" | grep -E \
+            '^(main\.go|internal/|static/|playbooks/|install\.sh|Makefile)' \
+            || true)
+
+          if [ -z "$CODE_CHANGED" ]; then
+            echo "No code files changed — docs check skipped."
+            exit 0
+          fi
+
+          echo "Code files changed:"
+          echo "$CODE_CHANGED"
+          echo ""
+
+          MISSING=()
+
+          echo "$CHANGED" | grep -q '^README\.md$'      || MISSING+=("README.md")
+          echo "$CHANGED" | grep -q '^docs/index\.html$' || MISSING+=("docs/index.html")
+
+          if [ ${#MISSING[@]} -eq 0 ]; then
+            echo "All required doc files updated."
+            exit 0
+          fi
+
+          echo "ERROR: Code changed but the following doc files were not updated:"
+          for f in "${MISSING[@]}"; do
+            echo "  - $f"
+          done
+          echo ""
+          echo "Update these files, or add the 'skip-docs-check' label if docs don't need changing (e.g. bug fix, refactor)."
+          exit 1
