@@ -19,6 +19,8 @@
 - name: Set ZFS dataset properties
   hosts: localhost
   gather_facts: false
+  vars_files:
+    - vars/zfs_allowed_values.yml
   vars:
     compression: "__skip__"
     quota: "__skip__"
@@ -41,6 +43,20 @@
           - name is defined and name != ""
           - name is not search("@")
         fail_msg: name is required and must not be a snapshot path
+
+    - name: Validate property values
+      ansible.builtin.assert:
+        that:
+          - compression in ['__skip__', ''] or compression in zfs_allowed_compression
+          - sync        in ['__skip__', ''] or sync        in zfs_allowed_sync
+          - atime       in ['__skip__', ''] or atime       in zfs_allowed_atime
+          - exec        in ['__skip__', ''] or exec        in zfs_allowed_exec
+          - copies      in ['__skip__', ''] or copies      in zfs_allowed_copies
+          - xattr       in ['__skip__', ''] or xattr       in zfs_allowed_xattr
+          - dedup       in ['__skip__', ''] or dedup       in zfs_allowed_dedup
+          - readonly    in ['__skip__', ''] or readonly    in zfs_allowed_readonly
+          - recordsize  in ['__skip__', ''] or recordsize  in zfs_allowed_recordsize
+        fail_msg: "One or more property values are not valid"
 
     - name: Build options
       ansible.builtin.set_fact:
