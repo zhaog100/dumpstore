@@ -19,6 +19,7 @@ import (
 	"dumpstore/internal/ansible"
 	"dumpstore/internal/api"
 	"dumpstore/internal/broker"
+	"dumpstore/internal/schema"
 )
 
 // version is overridden at build time via:
@@ -61,6 +62,11 @@ func main() {
 
 	if err := checkDeps(*baseDir); err != nil {
 		slog.Error("dependency check failed", "err", err)
+		os.Exit(1)
+	}
+
+	if err := schema.WriteVarsFile(filepath.Join(*baseDir, "playbooks")); err != nil {
+		slog.Error("failed to write Ansible vars file", "err", err)
 		os.Exit(1)
 	}
 

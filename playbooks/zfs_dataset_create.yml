@@ -19,6 +19,8 @@
 - name: Create ZFS dataset
   hosts: localhost
   gather_facts: false
+  vars_files:
+    - vars/zfs_allowed_values.yml
   vars:
     compression: ""
     quota: ""
@@ -44,6 +46,20 @@
         fail_msg: >-
           name and type are required; type must be filesystem or volume;
           volsize is required for volumes
+
+    - name: Validate property values
+      ansible.builtin.assert:
+        that:
+          - compression  == '' or compression  in zfs_allowed_compression
+          - sync         == '' or sync         in zfs_allowed_sync
+          - atime        == '' or atime        in zfs_allowed_atime
+          - exec         == '' or exec         in zfs_allowed_exec
+          - copies       == '' or copies       in zfs_allowed_copies
+          - xattr        == '' or xattr        in zfs_allowed_xattr
+          - dedup        == '' or dedup        in zfs_allowed_dedup
+          - recordsize   == '' or recordsize   in zfs_allowed_recordsize
+          - volblocksize == '' or volblocksize in zfs_allowed_volblocksize
+        fail_msg: "One or more property values are not valid"
 
     - name: Build filesystem options
       ansible.builtin.set_fact:

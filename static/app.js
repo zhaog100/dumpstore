@@ -25,6 +25,7 @@ const state = {
   scrubSchedules: {},      // pool name → ScrubSchedule
   scrubScheduleMode: 'cron',    // "cron" | "periodic"
   scrubThresholdDays: 35,       // FreeBSD periodic threshold (global)
+  schema: null,                 // GET /api/schema response
 };
 
 // ── API helpers ───────────────────────────────────────────────────────────────
@@ -145,6 +146,37 @@ function setRefreshing(v) {
   document.getElementById('refreshBtn').classList.toggle('spinning', v);
 }
 
+// ── Schema helpers ────────────────────────────────────────────────────────────
+// Populate all schema-driven <select> elements from state.schema.
+// Called once after loadAll() sets state.schema.
+function buildFormSelects() {
+  const props = state.schema?.dataset_properties || [];
+  for (const prop of props) {
+    if (prop.input_type !== 'select') continue;
+    const opts = prop.options.map(o => {
+      const sel = o.default ? ' selected' : '';
+      return `<option value="${esc(o.value)}"${sel}>${esc(o.label)}</option>`;
+    }).join('');
+    if (prop.create) {
+      const el = document.getElementById('ds-' + prop.name);
+      if (el) el.innerHTML = opts;
+    }
+    if (prop.editable) {
+      const el = document.getElementById('edit-ds-' + prop.name);
+      if (el) el.innerHTML = opts;
+    }
+  }
+
+  const shells = state.schema?.user_shells || [];
+  if (shells.length) {
+    const opts = shells.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+    const create = document.getElementById('user-shell');
+    if (create) create.innerHTML = opts;
+    const edit = document.getElementById('edit-user-shell');
+    if (edit) edit.innerHTML = opts;
+  }
+}
+
 // ── Load all ──────────────────────────────────────────────────────────────────
 // Fast path: all endpoints that respond in <100 ms. Rendered immediately.
 // Slow path: iostat (~1 s sampling) and SMART (drive scans) load separately
@@ -152,7 +184,7 @@ function setRefreshing(v) {
 async function loadAll() {
   setRefreshing(true);
   try {
-    const [pools, poolStatuses, version, sysinfo, datasets, snapshots, users, groups, smbData, smbShares, scrubSchedules] = await Promise.all([
+    const [pools, poolStatuses, version, sysinfo, datasets, snapshots, users, groups, smbData, smbShares, scrubSchedules, schema] = await Promise.all([
       api('GET', '/api/pools').catch(() => []),
       api('GET', '/api/poolstatus').catch(() => []),
       api('GET', '/api/version').catch(() => null),
@@ -164,6 +196,7 @@ async function loadAll() {
       api('GET', '/api/smb-users').catch(() => null),
       api('GET', '/api/smb-shares').catch(() => []),
       api('GET', '/api/scrub-schedules').catch(() => []),
+      api('GET', '/api/schema').catch(() => null),
     ]);
     state.pools = pools || [];
     state.poolStatuses = poolStatuses || [];
@@ -180,6 +213,8 @@ async function loadAll() {
     state.scrubScheduleMode = schedData.mode || 'cron';
     state.scrubThresholdDays = schedData.threshold_days || 35;
     state.scrubSchedules = Object.fromEntries((schedData.schedules || []).map(s => [s.pool, s]));
+    state.schema = schema;
+    buildFormSelects();
     renderPools();
     renderSysInfo();
     renderSoftware();
@@ -845,22 +880,17 @@ document.getElementById('datasetCancelBtn').addEventListener('click', () => data
 document.getElementById('newDatasetForm').addEventListener('submit', async e => {
   e.preventDefault();
   const body = {
-    name:         document.getElementById('ds-name').value.trim(),
-    type:         document.getElementById('ds-type').value,
-    volsize:      document.getElementById('ds-volsize').value.trim(),
-    volblocksize: document.getElementById('ds-volblocksize').value,
-    sparse:       document.getElementById('ds-sparse').checked,
-    compression:  document.getElementById('ds-compression').value,
-    quota:        document.getElementById('ds-quota').value.trim(),
-    mountpoint:   document.getElementById('ds-mountpoint').value.trim(),
-    recordsize:   document.getElementById('ds-recordsize').value,
-    atime:        document.getElementById('ds-atime').value,
-    exec:         document.getElementById('ds-exec').value,
-    sync:         document.getElementById('ds-sync').value,
-    dedup:        document.getElementById('ds-dedup').value,
-    copies:       document.getElementById('ds-copies').value,
-    xattr:        document.getElementById('ds-xattr').value,
+    name:    document.getElementById('ds-name').value.trim(),
+    type:    document.getElementById('ds-type').value,
+    volsize: document.getElementById('ds-volsize').value.trim(),
+    sparse:  document.getElementById('ds-sparse').checked,
   };
+  for (const p of (state.schema?.dataset_properties || [])) {
+    if (!p.create) continue;
+    const el = document.getElementById('ds-' + p.name);
+    if (!el) continue;
+    body[p.name] = p.input_type === 'text' ? el.value.trim() : el.value;
+  }
   datasetDialog.close();
   showOpLogRunning('Creating dataset…');
   try {
@@ -946,10 +976,17 @@ let _editDatasetName = '';
 let _editDatasetType = '';
 let _editOriginalProps = {};  // prop → display value at open time
 
-// Select fields managed by the edit dialog.
-const _editSelectFields = ['compression', 'atime', 'exec', 'sync', 'dedup', 'copies', 'xattr', 'readonly', 'recordsize'];
-// Text input fields managed by the edit dialog.
-const _editTextFields = ['quota', 'mountpoint'];
+// Fields managed by the edit dialog — derived from schema at runtime.
+function editSelectFields() {
+  return (state.schema?.dataset_properties || [])
+    .filter(p => p.editable && p.input_type === 'select')
+    .map(p => p.name);
+}
+function editTextFields() {
+  return (state.schema?.dataset_properties || [])
+    .filter(p => p.editable && p.input_type === 'text')
+    .map(p => p.name);
+}
 
 document.getElementById('editDatasetCancelBtn').addEventListener('click', () => editDatasetDialog.close());
 
@@ -962,7 +999,7 @@ async function openEditDatasetDialog(name, type) {
   document.getElementById('edit-ds-fs-section').style.display = type === 'filesystem' ? '' : 'none';
 
   // Reset form before fetching.
-  for (const f of [..._editSelectFields, ..._editTextFields]) {
+  for (const f of [...editSelectFields(), ...editTextFields()]) {
     const el = document.getElementById('edit-ds-' + f);
     if (el) el.value = '';
   }
@@ -992,13 +1029,13 @@ document.getElementById('editDatasetForm').addEventListener('submit', async e =>
 
   // Build body with only changed properties.
   const body = {};
-  for (const f of _editSelectFields) {
+  for (const f of editSelectFields()) {
     const el = document.getElementById('edit-ds-' + f);
     if (!el) continue;
     const val = el.value;
     if (val !== (_editOriginalProps[f] ?? '')) body[f] = val;
   }
-  for (const f of _editTextFields) {
+  for (const f of editTextFields()) {
     const el = document.getElementById('edit-ds-' + f);
     if (!el) continue;
     const val = el.value.trim();

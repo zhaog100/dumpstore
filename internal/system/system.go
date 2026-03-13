@@ -153,6 +153,24 @@ func ListSambaUsers() ([]string, error) {
 	return users, nil
 }
 
+// ListShells reads /etc/shells and returns all valid login shells.
+// Falls back to a minimal list if the file is not present.
+func ListShells() []string {
+	data, err := os.ReadFile("/etc/shells")
+	if err != nil {
+		return []string{"/bin/bash", "/bin/sh", "/sbin/nologin", "/usr/sbin/nologin"}
+	}
+	var shells []string
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || line[0] == '#' {
+			continue
+		}
+		shells = append(shells, line)
+	}
+	return shells
+}
+
 // UIDMin returns the minimum UID for regular users from /etc/login.defs (default 1000).
 func UIDMin() int {
 	data, err := os.ReadFile("/etc/login.defs")
