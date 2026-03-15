@@ -14,7 +14,8 @@ const state = {
   groups: [],
   sambaUsers: [],
   sambaAvailable: false,
-  smbShares: [],   // [{name, path}] from net usershare info
+  smbShares: [],      // [{name, path}] from net usershare info
+  iscsiTargets: [],   // [{iqn, zvol_name, ...}] from /api/iscsi-targets
   activeTab: 'pools',
   collapsedDatasets: new Set(),
   aclDataset: '',
@@ -186,7 +187,7 @@ function buildFormSelects() {
 async function loadAll() {
   setRefreshing(true);
   try {
-    const [pools, poolStatuses, version, sysinfo, datasets, snapshots, users, groups, smbData, smbShares, scrubSchedules, autoSnapshotSchedules, schema] = await Promise.all([
+    const [pools, poolStatuses, version, sysinfo, datasets, snapshots, users, groups, smbData, smbShares, iscsiTargets, scrubSchedules, autoSnapshotSchedules, schema] = await Promise.all([
       api('GET', '/api/pools').catch(() => []),
       api('GET', '/api/poolstatus').catch(() => []),
       api('GET', '/api/version').catch(() => null),
@@ -197,6 +198,7 @@ async function loadAll() {
       api('GET', '/api/groups').catch(() => []),
       api('GET', '/api/smb-users').catch(() => null),
       api('GET', '/api/smb-shares').catch(() => []),
+      api('GET', '/api/iscsi-targets').catch(() => []),
       api('GET', '/api/scrub-schedules').catch(() => []),
       api('GET', '/api/auto-snapshot-schedules').catch(() => ({})),
       api('GET', '/api/schema').catch(() => null),
@@ -212,6 +214,7 @@ async function loadAll() {
     state.sambaAvailable = smbData?.available ?? false;
     state.sambaUsers = smbData?.users || [];
     state.smbShares = smbShares || [];
+    state.iscsiTargets = iscsiTargets || [];
     const schedData = scrubSchedules || { mode: 'cron', schedules: [] };
     state.scrubScheduleMode = schedData.mode || 'cron';
     state.scrubThresholdDays = schedData.threshold_days || 35;
@@ -777,6 +780,7 @@ function renderDatasets() {
             ${d.type === 'filesystem' && d.mountpoint !== 'none' && d.mountpoint !== '-' ? `<button class="btn-chown btn-small" data-ds="${esc(d.name)}">Chown</button>` : ''}
             ${d.type === 'filesystem' && d.mountpoint !== 'none' && d.mountpoint !== '-' ? `<button class="btn-nfs btn-small${d.sharenfs && d.sharenfs !== 'off' && d.sharenfs !== '-' ? ' active' : ''}" data-ds="${esc(d.name)}" title="${d.sharenfs && d.sharenfs !== 'off' && d.sharenfs !== '-' ? 'NFS shared: ' + esc(d.sharenfs) : 'Not shared'}">NFS</button>` : ''}
             ${d.type === 'filesystem' && d.mountpoint !== 'none' && d.mountpoint !== '-' ? (() => { const _sh = state.smbShares.find(s => s.path === d.mountpoint); return `<button class="btn-smb btn-small${_sh ? ' active' : ''}" data-ds="${esc(d.name)}" title="${_sh ? 'SMB shared: ' + esc(_sh.name) : 'Not shared'}">SMB</button>`; })() : ''}
+            ${d.type === 'volume' ? (() => { const _it = state.iscsiTargets.find(t => t.zvol_name === d.name); return `<button class="btn-iscsi btn-small${_it ? ' active' : ''}" data-ds="${esc(d.name)}" title="${_it ? 'iSCSI target: ' + esc(_it.iqn) : 'Not exposed as iSCSI target'}">iSCSI</button>`; })() : ''}
             <button class="btn-autosnap btn-small${state.autoSnapshot[d.name]?.['com.sun:auto-snapshot']?.value === 'true' ? ' active' : ''}" data-ds="${esc(d.name)}" title="Auto-snapshot schedule">Snap</button>
             ${canDelete ? `<button class="btn-del" data-ds="${esc(d.name)}" data-type="${esc(d.type)}">Delete</button>` : ''}
           </div>
@@ -829,6 +833,10 @@ function renderDatasets() {
 
   wrap.querySelectorAll('.btn-smb[data-ds]').forEach(btn => {
     btn.addEventListener('click', () => openSMBDialog(btn.dataset.ds));
+  });
+
+  wrap.querySelectorAll('.btn-iscsi[data-ds]').forEach(btn => {
+    btn.addEventListener('click', () => openISCSIDialog(btn.dataset.ds));
   });
 
   wrap.querySelectorAll('.btn-autosnap[data-ds]').forEach(btn => {
@@ -2283,6 +2291,130 @@ function startSSE() {
     }
   };
 }
+
+// ── iSCSI target dialog ───────────────────────────────────────────────────────
+const iscsiDialog = document.getElementById('iscsiDialog');
+document.getElementById('iscsiDialogClose').addEventListener('click', () => iscsiDialog.close());
+
+let _iscsiDataset = '';
+let _iscsiCurrentIQN = '';
+
+document.getElementById('iscsiAuthMode').addEventListener('change', e => {
+  document.getElementById('iscsiCHAPFields').style.display = e.target.value === 'chap' ? '' : 'none';
+});
+
+async function _refreshISCSITargets() {
+  const targets = await api('GET', '/api/iscsi-targets').catch(() => []);
+  state.iscsiTargets = targets || [];
+  renderDatasets();
+}
+
+async function openISCSIDialog(dataset) {
+  _iscsiDataset = dataset;
+  _iscsiCurrentIQN = '';
+  document.getElementById('iscsiDialogTitle').textContent = 'iSCSI Target \u2014 ' + dataset;
+  document.getElementById('iscsiDialogStatus').innerHTML = '<span class="muted">Loading\u2026</span>';
+  document.getElementById('iscsiCreateSection').style.display = 'none';
+  document.getElementById('iscsiRemoveSection').style.display = 'none';
+  iscsiDialog.showModal();
+
+  try {
+    const targets = await api('GET', '/api/iscsi-targets');
+    state.iscsiTargets = targets || [];
+    const existing = state.iscsiTargets.find(t => t.zvol_name === dataset);
+
+    if (existing) {
+      _iscsiCurrentIQN = existing.iqn;
+      document.getElementById('iscsiDialogStatus').innerHTML = `
+        <div class="acl-entry" style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem">
+          <span class="field-note" style="width:5rem">IQN</span>
+          <code style="flex:1;word-break:break-all">${esc(existing.iqn)}</code>
+        </div>
+        <div class="acl-entry" style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem">
+          <span class="field-note" style="width:5rem">Portals</span>
+          <code>${esc((existing.portals || []).join(', ') || '\u2014')}</code>
+        </div>
+        <div class="acl-entry" style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem">
+          <span class="field-note" style="width:5rem">Auth</span>
+          <code>${esc(existing.auth_mode || 'none')}</code>
+        </div>
+        <div class="acl-entry" style="display:flex;align-items:center;gap:0.5rem">
+          <span class="field-note" style="width:5rem">Initiators</span>
+          <code>${existing.initiators && existing.initiators.length ? esc(existing.initiators.join(', ')) : 'any (allow-all)'}</code>
+        </div>`;
+      document.getElementById('iscsiRemoveSection').style.display = '';
+      document.getElementById('iscsiRemoveBtn').style.display = '';
+      document.getElementById('iscsiExposeBtn').style.display = 'none';
+    } else {
+      // Auto-generate IQN from dataset name and current date.
+      const now = new Date();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const year = now.getFullYear();
+      const slug = dataset.replace(/\//g, '-');
+      document.getElementById('iscsiIQN').value = `iqn.${year}-${month}.io.dumpstore:${slug}`;
+      document.getElementById('iscsiPortalIP').value = '0.0.0.0';
+      document.getElementById('iscsiPortalPort').value = '3260';
+      document.getElementById('iscsiAuthMode').value = 'none';
+      document.getElementById('iscsiCHAPFields').style.display = 'none';
+      document.getElementById('iscsiCHAPUser').value = '';
+      document.getElementById('iscsiCHAPPass').value = '';
+      document.getElementById('iscsiInitiators').value = '';
+      document.getElementById('iscsiDialogStatus').innerHTML = '<p class="muted">Not currently exposed as an iSCSI target.</p>';
+      document.getElementById('iscsiCreateSection').style.display = '';
+      document.getElementById('iscsiExposeBtn').style.display = '';
+      document.getElementById('iscsiRemoveBtn').style.display = 'none';
+    }
+  } catch (e) {
+    document.getElementById('iscsiDialogStatus').innerHTML = `<p class="op-error">${esc(e.message)}</p>`;
+  }
+}
+
+document.getElementById('iscsiExposeBtn').addEventListener('click', async () => {
+  const zvol = _iscsiDataset;
+  const iqn = document.getElementById('iscsiIQN').value.trim();
+  const portalIP = document.getElementById('iscsiPortalIP').value.trim() || '0.0.0.0';
+  const portalPort = document.getElementById('iscsiPortalPort').value.trim() || '3260';
+  const authMode = document.getElementById('iscsiAuthMode').value;
+  const chapUser = document.getElementById('iscsiCHAPUser').value.trim();
+  const chapPass = document.getElementById('iscsiCHAPPass').value;
+  const initiators = document.getElementById('iscsiInitiators').value.trim()
+    .split('\n').map(s => s.trim()).filter(Boolean);
+
+  if (!iqn) { toast('IQN is required', 'error'); return; }
+
+  iscsiDialog.close();
+  showOpLogRunning('Creating iSCSI target\u2026');
+  try {
+    const result = await api('POST', '/api/iscsi-targets', {
+      zvol,
+      iqn,
+      portal_ip: portalIP,
+      portal_port: portalPort,
+      auth_mode: authMode,
+      chap_user: chapUser,
+      chap_password: chapPass,
+      initiators,
+    });
+    showOpLog('iSCSI target created: ' + iqn, result.tasks, null);
+    await _refreshISCSITargets();
+  } catch (e) {
+    showOpLog('Failed to create iSCSI target', e.tasks, e.message);
+  }
+});
+
+document.getElementById('iscsiRemoveBtn').addEventListener('click', async () => {
+  const zvol = _iscsiDataset;
+  const iqn = _iscsiCurrentIQN;
+  iscsiDialog.close();
+  showOpLogRunning('Removing iSCSI target\u2026');
+  try {
+    const result = await api('DELETE', `/api/iscsi-targets?iqn=${encodeURIComponent(iqn)}&zvol=${encodeURIComponent(zvol)}`);
+    showOpLog('iSCSI target removed: ' + iqn, result.tasks, null);
+    await _refreshISCSITargets();
+  } catch (e) {
+    showOpLog('Failed to remove iSCSI target', e.tasks, e.message);
+  }
+});
 
 // ── Scrub schedule dialog wiring ──────────────────────────────────────────────
 document.getElementById('scrubScheduleSaveBtn').addEventListener('click', saveScrubSchedule);

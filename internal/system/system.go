@@ -369,6 +369,18 @@ func detectPkgManager() string {
 	return ""
 }
 
+// probeISCSIBackend returns "targetcli <version>" on Linux or "ctld (installed)"
+// on FreeBSD, whichever is found first. Returns "" if neither is present.
+func probeISCSIBackend() string {
+	if v := probeVersion("targetcli", "version"); v != "" {
+		return "targetcli — " + v
+	}
+	if v := probePresence("ctld"); v != "" {
+		return "ctld — " + v
+	}
+	return ""
+}
+
 // probeNFSServer returns "installed" when the platform NFS server tool is present.
 // Linux uses exportfs (from nfs-kernel-server/nfs-utils).
 // FreeBSD ships nfsd in the base system, so we probe mountd instead.
@@ -388,8 +400,9 @@ func softwareVersions() []SoftwareTool {
 		{Name: "NFS server", Version: probeNFSServer()},
 		{Name: "nfs4-acl-tools", Version: probePresence("nfs4_setfacl")},
 		{Name: "setfacl (ACL)", Version: probePresence("setfacl")},
-		{Name: "zfs-auto-snapshot", Version: probeVersion("zfs-auto-snapshot", "--version")},
+		{Name: "zfs-auto-snapshot", Version: probePresence("zfs-auto-snapshot")},
 		{Name: "Samba (smbd)", Version: probeVersion("smbd", "--version")},
+		{Name: "iSCSI backend", Version: probeISCSIBackend()},
 		{Name: "Package manager", Version: detectPkgManager()},
 	}
 }

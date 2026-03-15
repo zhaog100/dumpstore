@@ -1,0 +1,159 @@
+---
+# Required extra vars:
+#   zvol         - ZFS volume name (e.g. tank/vms/win11)
+#   iqn          - iSCSI Qualified Name (e.g. iqn.2024-01.io.dumpstore:tank-vms-win11)
+#   portal_ip    - portal listen IP (default: 0.0.0.0)
+#   portal_port  - portal listen port (default: 3260)
+#   auth_mode    - "none" or "chap"
+#   chap_user    - CHAP username (required when auth_mode=chap)
+#   chap_password - CHAP password (required when auth_mode=chap)
+#   initiators   - comma-separated initiator IQNs, or "" for allow-all
+- name: Create iSCSI target from ZFS volume (Linux/targetcli)
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Validate required vars
+      ansible.builtin.assert:
+        that:
+          - zvol is defined and zvol != ""
+          - iqn is defined and iqn != ""
+          - portal_ip is defined and portal_ip != ""
+          - portal_port is defined and portal_port != ""
+          - auth_mode is defined and auth_mode in ["none", "chap"]
+          - zvol is not search('[;|&$`]')
+          - iqn is not search('[;|&$`\s]')
+        fail_msg: "Required vars missing or contain invalid characters"
+
+    - name: Check targetcli is available
+      ansible.builtin.command:
+        argv: ["which", "targetcli"]
+      changed_when: false
+      register: _which_targetcli
+      failed_when: _which_targetcli.rc != 0
+
+    - name: Verify zvol device exists
+      ansible.builtin.stat:
+        path: "/dev/zvol/{{ zvol }}"
+      register: _zvol_stat
+      failed_when: not _zvol_stat.stat.exists
+
+    - name: Derive backstore name from zvol path
+      ansible.builtin.set_fact:
+        backstore_name: "{{ zvol | replace('/', '-') }}"
+
+    - name: Create block backstore
+      ansible.builtin.command:
+        argv:
+          - targetcli
+          - /backstores/block
+          - create
+          - "name={{ backstore_name }}"
+          - "dev=/dev/zvol/{{ zvol }}"
+      changed_when: true
+
+    - name: Create iSCSI target
+      ansible.builtin.command:
+        argv:
+          - targetcli
+          - /iscsi
+          - create
+          - "{{ iqn }}"
+      changed_when: true
+
+    - name: Create LUN
+      ansible.builtin.command:
+        argv:
+          - targetcli
+          - "/iscsi/{{ iqn }}/tpg1/luns"
+          - create
+          - "/backstores/block/{{ backstore_name }}"
+      changed_when: true
+
+    - name: Delete default portal (if custom portal requested)
+      ansible.builtin.command:
+        argv:
+          - targetcli
+          - "/iscsi/{{ iqn }}/tpg1/portals"
+          - delete
+          - "0.0.0.0"
+          - "3260"
+      changed_when: true
+      when: portal_ip != "0.0.0.0" or portal_port != "3260"
+      ignore_errors: true
+
+    - name: Create custom portal
+      ansible.builtin.command:
+        argv:
+          - targetcli
+          - "/iscsi/{{ iqn }}/tpg1/portals"
+          - create
+          - "{{ portal_ip }}"
+          - "{{ portal_port }}"
+      changed_when: true
+      when: portal_ip != "0.0.0.0" or portal_port != "3260"
+
+    - name: Set allow-all mode (no initiator ACLs, no auth)
+      ansible.builtin.command:
+        argv:
+          - targetcli
+          - "/iscsi/{{ iqn }}/tpg1/"
+          - set
+          - attribute
+          - "authentication=0"
+          - "generate_node_acls=1"
+          - "demo_mode_write_protect=0"
+      changed_when: true
+      when: (initiators is not defined or initiators == "") and auth_mode == "none"
+
+    - name: Set ACL mode (specific initiators)
+      ansible.builtin.command:
+        argv:
+          - targetcli
+          - "/iscsi/{{ iqn }}/tpg1/"
+          - set
+          - attribute
+          - "generate_node_acls=0"
+          - "demo_mode_write_protect=0"
+      changed_when: true
+      when: initiators is defined and initiators != ""
+
+    - name: Enable CHAP authentication
+      ansible.builtin.command:
+        argv:
+          - targetcli
+          - "/iscsi/{{ iqn }}/tpg1/"
+          - set
+          - attribute
+          - "authentication=1"
+      changed_when: true
+      when: auth_mode == "chap"
+
+    - name: Set CHAP credentials
+      ansible.builtin.command:
+        argv:
+          - targetcli
+          - "/iscsi/{{ iqn }}/tpg1/"
+          - set
+          - auth
+          - "userid={{ chap_user }}"
+          - "password={{ chap_password }}"
+      changed_when: true
+      when: auth_mode == "chap"
+
+    - name: Add initiator ACLs
+      ansible.builtin.command:
+        argv:
+          - targetcli
+          - "/iscsi/{{ iqn }}/tpg1/acls"
+          - create
+          - "{{ item }}"
+      loop: "{{ initiators.split(',') | select('ne', '') | list }}"
+      changed_when: true
+      when: initiators is defined and initiators != ""
+
+    - name: Save targetcli configuration
+      ansible.builtin.command:
+        argv:
+          - targetcli
+          - saveconfig
+      changed_when: true
