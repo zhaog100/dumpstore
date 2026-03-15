@@ -2,24 +2,24 @@
 
 ## Critical
 
-- [ ] **`runner.go`: Unbounded scanner buffer** — Add `scanner.Buffer(buf, maxSize)` to cap NDJSON output reads; unbounded reads can exhaust memory on runaway Ansible output.
-- [ ] **Passwords in plaintext without TLS enforcement** — No HTTPS enforcement at server layer. Document or enforce TLS; passwords for user/SMB endpoints are exposed without it.
-- [ ] **No rate limiting on password endpoints** — `/api/users` password operations have no throttling, enabling brute-force attacks.
+- [x] **`runner.go`: Unbounded scanner buffer** — Added `scanner.Buffer(buf, 4 MB)` cap on NDJSON line reads.
+- [x] **Passwords in plaintext without TLS enforcement** — Documented in `SECURITY.md` with recommended mitigations (reverse proxy, SSH tunnel, VPN).
+- [x] **No rate limiting on password endpoints** — Documented in `SECURITY.md`; mitigation is proxy-layer rate limiting.
 
 ## High
 
-- [ ] **`handlers.go`: Dataset existence not checked before playbook** — delete, props, ACL handlers validate name format but don't verify dataset exists; playbook fails with cryptic errors.
-- [ ] **`handlers.go`: ACL principal regex too loose** — `aclSafeRe` allows ambiguous NFSv4 principals (e.g. multiple `@`). Tighten to enforce strict `user@domain` format.
-- [ ] **`acl.go`: `DatasetHasACL` silently returns false when tools missing** — If `getfacl`/`nfs4_getfacl` aren't installed, UI shows "no ACLs" with no indication of the real problem. Surface an error instead.
-- [ ] **`playbooks/user_create.yml`: No rollback on partial failure** — If group creation succeeds but user creation fails, group is orphaned. Add cleanup/rollback logic.
-- [ ] **`handlers.go`: Group members not verified to exist** — `modifyGroup` accepts comma-separated member list without checking usernames exist in `/etc/passwd`.
+- [x] **`handlers.go`: Dataset existence not checked before playbook** — `datasetExists` helper added; `deleteDataset`, `setDatasetProps`, `setDatasetOwnership`, `setACLEntry`, `removeACLEntry` all return 404 before running the playbook.
+- [x] **`handlers.go`: ACL principal regex too loose** — `aclSafeRe` now enforces per-field `@` rules: at most one, not leading, trailing only for all-uppercase NFSv4 well-known principals (OWNER@, GROUP@, EVERYONE@).
+- [x] **`acl.go`: `DatasetHasACL` silently returns false when tools missing** — Signature changed to `(bool, error)`; both tool errors are now propagated. Call site in `getACLStatus` logs `slog.Warn` and falls back to `acltype` property.
+- [ ] **`playbooks/user_create.yml`: No rollback on partial failure** — skipped; Ansible lacks native rollback and the orphaned-group risk is low enough to defer.
+- [x] **`handlers.go`: Group members not verified to exist** — `modifyGroup` now calls `system.ListUsers()` and rejects unknown member names with a 400 listing the offenders.
 
 ## Medium
 
-- [ ] **`handlers.go`: JSON decoder accepts trailing garbage** — `{"key":"val"}junk` is silently accepted. Check for `io.EOF` after decode or use a stricter decoder.
-- [ ] **`handlers.go`: `reZFSName` allows numeric-only path components** — e.g. `pool/123` passes validation but ZFS rejects it. Require first char of each component to be `[a-zA-Z]`.
-- [ ] **`zfs.go`: `GetMountpointOwnership` symlink behavior undocumented** — `stat` follows symlinks silently; document or pick explicit behavior (`-L` vs. not).
-- [ ] **`handlers.go`: Insufficient error context on playbook failure** — When playbook exits non-zero with no task-level failure detected, error doesn't name the last-executed task.
+- [x] **`handlers.go`: JSON decoder accepts trailing garbage** — `decodeJSON` helper added; does a second `Decode` and rejects unless it returns `io.EOF`. All 14 call sites updated.
+- [x] **`handlers.go`: `reZFSName` allows numeric-only path components** — Regex first-char class tightened from `[a-zA-Z0-9]` to `[a-zA-Z]` for each path component.
+- [x] **`zfs.go`: `GetMountpointOwnership` symlink behavior undocumented** — Added `-L` flag explicitly and documented the follow-symlink choice in the function comment.
+- [x] **`handlers.go`: Insufficient error context on playbook failure** — `lastTaskName` tracked during NDJSON scan; included in the fallback non-zero-exit error message.
 
 ## Low
 

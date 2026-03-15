@@ -761,6 +761,19 @@ sudo ./dumpstore -addr :8080 -dir .</pre>
     </div>
   </section>
 
+  <section id="security">
+    <div class="section-header">
+      <h2>security</h2>
+      <div class="divider"></div>
+    </div>
+    <p style="max-width:640px;line-height:1.6;color:var(--text-muted)">
+      dumpstore has no built-in authentication and runs as root. It is designed for trusted, private networks.
+      Several endpoints accept passwords in the request body — without TLS these travel in plaintext.
+      See <a href="https://github.com/langerma/dumpstore/blob/main/SECURITY.md" style="color:var(--accent)">SECURITY.md</a>
+      for recommended mitigations (reverse proxy with TLS, SSH tunnel, VPN) and rate-limiting guidance.
+    </p>
+  </section>
+
 </main>
 
 <footer>

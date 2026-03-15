@@ -324,10 +324,14 @@ func ListAutoSnapshotProps() (map[string]AutoSnapshotProps, error) {
 }
 
 // GetMountpointOwnership returns the owner username and group name of a
-// mountpoint directory by running `stat --format=%U %G <path>`.
+// mountpoint directory by running `stat -L --format=%U %G <path>`.
+// -L causes stat to follow symlinks: ownership is reported for the symlink
+// target, not the symlink itself. ZFS mountpoints are never symlinks in
+// practice, so the flag is a no-op in normal use, but makes the behaviour
+// explicit and avoids surprising results if a symlink is somehow present.
 // This is Linux-specific and matches the target platform for the service.
 func GetMountpointOwnership(mountpoint string) (owner, group string, err error) {
-	out, err := run("stat", "--format=%U %G", mountpoint)
+	out, err := run("stat", "-L", "--format=%U %G", mountpoint)
 	if err != nil {
 		return "", "", fmt.Errorf("stat %s: %w", mountpoint, err)
 	}
