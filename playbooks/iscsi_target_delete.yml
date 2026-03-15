@@ -1,0 +1,53 @@
+---
+# Required extra vars:
+#   iqn   - iSCSI Qualified Name of the target to remove
+#   zvol  - ZFS volume name (e.g. tank/vms/win11) — used to derive backstore name
+- name: Delete iSCSI target (Linux/targetcli)
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Validate required vars
+      ansible.builtin.assert:
+        that:
+          - iqn is defined and iqn != ""
+          - zvol is defined and zvol != ""
+          - iqn is not search('[;|&$`\s]')
+          - zvol is not search('[;|&$`]')
+        fail_msg: "iqn and zvol are required"
+
+    - name: Check targetcli is available
+      ansible.builtin.command:
+        argv: ["which", "targetcli"]
+      changed_when: false
+      register: _which_targetcli
+      failed_when: _which_targetcli.rc != 0
+
+    - name: Derive backstore name from zvol path
+      ansible.builtin.set_fact:
+        backstore_name: "{{ zvol | replace('/', '-') }}"
+
+    - name: Delete iSCSI target (cascades to TPG, LUNs, portals, ACLs)
+      ansible.builtin.command:
+        argv:
+          - targetcli
+          - /iscsi
+          - delete
+          - "{{ iqn }}"
+      changed_when: true
+
+    - name: Delete block backstore
+      ansible.builtin.command:
+        argv:
+          - targetcli
+          - /backstores/block
+          - delete
+          - "{{ backstore_name }}"
+      changed_when: true
+      ignore_errors: true
+
+    - name: Save targetcli configuration
+      ansible.builtin.command:
+        argv:
+          - targetcli
+          - saveconfig
+      changed_when: true

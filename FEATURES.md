@@ -27,6 +27,7 @@
 | Pool scrub management    | v0.1.2 | Trigger scrubs, cancel running scrubs, view last scrub time/status/progress per pool                                           |
 | Pool scrub scheduling    | v0.1.2 | Per-pool schedule via Linux `zfsutils-linux` (2nd Sunday monthly) or FreeBSD `periodic.conf` (configurable threshold)          |
 | Auto-snapshot scheduling | v0.1.3 | Manage `com.sun:auto-snapshot*` ZFS properties per dataset; integrates with `zfs-auto-snapshot` (Linux) / `zfstools` (FreeBSD) |
+| iSCSI target management  | v0.1.4 | Expose zvols as iSCSI targets (`targetcli`/LIO on Linux, `ctld` on FreeBSD); dialog with IQN, portal, CHAP auth, initiator ACLs |
 
 ---
 
@@ -37,7 +38,6 @@
 | ZFS native encryption    | High     | Load/unload keys, encryption status per dataset, keyformat/keylocation support   |
 | Dataset rename           | Medium   | Rename a dataset or volume in place                                              |
 | Snapshot clone           | Medium   | Create a new dataset from an existing snapshot                                   |
-| iSCSI target management  | Medium   | Expose zvols as iSCSI targets (`targetcli` on Linux, `ctld` on FreeBSD)          |
 | Pool import/export       | Medium   | Import available pools from attached devices; export pools safely                |
 | Snapshot diff            | Medium   | Show files changed between two snapshots (`zfs diff`)                            |
 | Per-user quota tracking  | Medium   | Space usage per user/group (`zfs userspace` / `zfs groupspace`)                  |

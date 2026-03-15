@@ -32,6 +32,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **Group management** — list, create, edit (name, GID, members), and delete local groups; system groups hidden by default with the same toggle
 - **NFS share management** — enable, configure, and disable NFS sharing per dataset via the ZFS `sharenfs` property; cross-platform (Linux and FreeBSD)
 - **SMB share management** — create and remove Samba usershares per dataset via `net usershare`; manage Samba users (add/remove from `smbpasswd`); one-click Samba setup (`smb_setup.yml` configures usershares, disables `[homes]`, enables PAM passthrough on Linux); cross-platform (Linux and FreeBSD)
+- **iSCSI target management** — expose ZFS volumes as iSCSI targets via `targetcli`/LIO on Linux or `ctld` on FreeBSD; per-zvol dialog with IQN (auto-generated, editable), portal IP/port, auth mode (None/CHAP), and initiator ACL list
 - **ACL management** — view, add, and remove POSIX ACL entries (`getfacl`/`setfacl`, requires `acl` package) and NFSv4 ACL entries (`nfs4_getfacl`/`nfs4_setfacl`, requires `nfs4-acl-tools`) per dataset; setting an ACL entry automatically sets the correct `acltype` ZFS property; one-click enable for datasets with `acltype=off`; recursive apply supported for POSIX
 - **Live updates** — Server-Sent Events push pool, dataset, snapshot, I/O, user and group changes; server polls every 10 s and pushes only on change; falls back to 30 s REST polling if SSE is unavailable
 - **Prometheus metrics** — `GET /metrics` exposes Go runtime and process stats, HTTP request counters and latency histograms (`http_requests_total`, `http_request_duration_seconds`), and Ansible playbook metrics (`ansible_runs_total`, `ansible_run_duration_seconds`)
@@ -231,6 +232,10 @@ POST   /api/smb-config/pam    → smb_setup.yml             (ansible)
 
 GET    /api/auto-snapshot/{ds} → zfs get com.sun:auto-snapshot* (direct)
 PUT    /api/auto-snapshot/{ds} → zfs_autosnap_set.yml           (ansible)
+
+GET    /api/iscsi-targets      → parse targetcli saveconfig.json or /etc/ctl.conf (direct)
+POST   /api/iscsi-targets      → iscsi_target_create.yml / iscsi_target_create_freebsd.yml (ansible)
+DELETE /api/iscsi-targets      → iscsi_target_delete.yml / iscsi_target_delete_freebsd.yml (ansible)
 ```
 
 ## Requirements
@@ -600,7 +605,7 @@ The browser UI uses `EventSource` to subscribe to all six topics and falls back 
 | Snapshot clone           | Create a new dataset from an existing snapshot                                                |
 | ~~Auto-snapshot scheduling~~ | ~~Hourly/daily/weekly/monthly rotation policies~~ — **done** (`com.sun:auto-snapshot*` ZFS properties; integrates with `zfs-auto-snapshot` / `zfstools`) |
 | ZFS native encryption    | Load/unload keys, show encryption status per dataset, support keyformat/keylocation           |
-| iSCSI target management  | Expose zvols as iSCSI targets (targetcli on Linux, ctld on FreeBSD)                           |
+| ~~iSCSI target management~~ | ~~Expose zvols as iSCSI targets~~ — **done** (`targetcli`/LIO on Linux, `ctld` on FreeBSD; IQN, portal, CHAP, initiator ACLs) |
 | Pool import/export       | Import available pools from attached devices; export pools safely                             |
 | Snapshot diff            | Show files changed between two snapshots (`zfs diff`)                                         |
 | Per-user quota tracking  | Show space usage per user/group (`zfs userspace` / `zfs groupspace`)                          |

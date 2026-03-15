@@ -708,6 +708,63 @@
     </div>
   </dialog>
 
+  <!-- iSCSI TARGET DIALOG -->
+  <dialog id="iscsiDialog" style="min-width:420px;max-width:540px">
+    <h3 id="iscsiDialogTitle">iSCSI Target</h3>
+    <div class="dialog-body">
+      <div id="iscsiDialogStatus" style="margin-bottom:1rem"></div>
+
+      <!-- Create form (shown when zvol is not yet exposed) -->
+      <div id="iscsiCreateSection" style="display:none">
+        <fieldset class="form-section">
+          <legend>Target settings</legend>
+          <label>IQN
+            <input type="text" id="iscsiIQN" style="width:100%;font-family:monospace;font-size:0.85rem" placeholder="iqn.YYYY-MM.domain:name">
+          </label>
+          <div class="form-grid" style="margin-top:0.75rem">
+            <label>Portal IP
+              <input type="text" id="iscsiPortalIP" value="0.0.0.0">
+            </label>
+            <label>Port
+              <input type="text" id="iscsiPortalPort" value="3260" style="width:5rem">
+            </label>
+          </div>
+          <label style="margin-top:0.75rem;display:block">Auth mode
+            <select id="iscsiAuthMode">
+              <option value="none">None (allow all)</option>
+              <option value="chap">CHAP</option>
+            </select>
+          </label>
+          <div id="iscsiCHAPFields" style="display:none;margin-top:0.75rem">
+            <div class="form-grid">
+              <label>CHAP username
+                <input type="text" id="iscsiCHAPUser" autocomplete="off">
+              </label>
+              <label>CHAP password
+                <input type="password" id="iscsiCHAPPass" autocomplete="new-password">
+              </label>
+            </div>
+          </div>
+          <label style="margin-top:0.75rem;display:block">Initiator ACLs
+            <span class="field-note">(one IQN per line &mdash; leave blank to allow all)</span>
+            <textarea id="iscsiInitiators" rows="3" style="width:100%;font-family:monospace;font-size:0.82rem;resize:vertical" placeholder="iqn.1994-05.com.redhat:client1&#10;iqn.2000-01.com.synology:nas"></textarea>
+          </label>
+        </fieldset>
+      </div>
+
+      <!-- Remove section (shown when zvol is already exposed) -->
+      <div id="iscsiRemoveSection" style="display:none">
+        <p class="field-note" style="margin:0 0 0.75rem">Removing the target will disconnect any active initiator sessions.</p>
+      </div>
+
+      <div class="dialog-actions">
+        <button type="button" id="iscsiDialogClose" class="btn-secondary">Cancel</button>
+        <button type="button" id="iscsiRemoveBtn" class="btn-danger" style="display:none">Remove Target</button>
+        <button type="button" id="iscsiExposeBtn" class="btn-primary" style="display:none">Expose as iSCSI</button>
+      </div>
+    </div>
+  </dialog>
+
   <!-- OPERATION LOG DIALOG -->
   <dialog id="opLogDialog">
     <h3 id="opLogTitle">Operation Result</h3>
