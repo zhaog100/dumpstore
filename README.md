@@ -570,14 +570,16 @@ Server-Sent Events stream. The server pushes named events whenever data changes,
 
 **Available topics:**
 
-| Topic            | Data                              | Source                                    |
-|------------------|-----------------------------------|-------------------------------------------|
-| `pool.query`     | Same JSON as `GET /api/pools`     | Pushed every 10 s on change               |
-| `dataset.query`  | Same JSON as `GET /api/datasets`  | Pushed every 10 s on change               |
-| `snapshot.query` | Same JSON as `GET /api/snapshots` | Pushed every 10 s on change               |
-| `iostat`         | Same JSON as `GET /api/iostat`    | Pushed every 10 s always                  |
-| `user.query`     | Same JSON as `GET /api/users`     | Pushed on write op + every 10 s on change |
-| `group.query`    | Same JSON as `GET /api/groups`    | Pushed on write op + every 10 s on change |
+| Topic                | Data                                            | Source                                    |
+|----------------------|-------------------------------------------------|-------------------------------------------|
+| `pool.query`         | Same JSON as `GET /api/pools`                   | Pushed every 10 s on change               |
+| `poolstatus`         | Same JSON as `GET /api/poolstatus`              | Pushed every 10 s on change               |
+| `dataset.query`      | Same JSON as `GET /api/datasets`                | Pushed every 10 s on change               |
+| `autosnapshot.query` | Same JSON as `GET /api/auto-snapshot-schedules` | Pushed every 10 s on change               |
+| `snapshot.query`     | Same JSON as `GET /api/snapshots`               | Pushed every 10 s on change               |
+| `iostat`             | Same JSON as `GET /api/iostat`                  | Pushed every 10 s always                  |
+| `user.query`         | Same JSON as `GET /api/users`                   | Pushed on write op + every 10 s on change |
+| `group.query`        | Same JSON as `GET /api/groups`                  | Pushed on write op + every 10 s on change |
 
 Each event follows the SSE wire format:
 
@@ -595,7 +597,7 @@ Example — watch pool health and I/O live:
 curl -N 'http://localhost:8080/api/events?topics=pool.query,iostat'
 ```
 
-The browser UI uses `EventSource` to subscribe to all six topics and falls back to 30 s REST polling automatically if the SSE connection is lost. User and group topics are also published immediately after any write operation so the UI reflects changes without waiting for the next poll cycle.
+The browser UI uses `EventSource` to subscribe to all eight topics and falls back to 30 s REST polling automatically if the SSE connection is lost. User and group topics are also published immediately after any write operation so the UI reflects changes without waiting for the next poll cycle.
 
 ## Planned
 
