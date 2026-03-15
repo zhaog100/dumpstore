@@ -36,6 +36,10 @@ The service starts automatically and listens on `http://localhost:8080`.
 
 See [[Installation]] for detailed instructions, requirements, and configuration.
 
+## Security
+
+dumpstore has no built-in authentication and runs as root. It is designed for trusted, private networks. Several endpoints accept passwords in the request body — without TLS these travel in plaintext. See [SECURITY.md](https://github.com/langerma/dumpstore/blob/main/SECURITY.md) for recommended mitigations (reverse proxy with TLS, SSH tunnel, VPN) and rate-limiting guidance.
+
 ## Pages
 
 - [[Installation]] — requirements, install script, make, manual build, service configuration
