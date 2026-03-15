@@ -12,7 +12,7 @@
 | Dataset creation         | v0.0.1 | Filesystems and volumes with all ZFS properties                                           |
 | Dataset editing          | v0.0.1 | Update properties in place (set or inherit)                                               |
 | Dataset deletion         | v0.0.1 | Recursive option; confirm-by-typing dialog                                                |
-| Snapshot management      | v0.0.1 | List, create (recursive), delete                                                          |
+| Snapshot management      | v0.0.1 | List, create (recursive), delete single or multiple (batch delete with checkboxes)        |
 | Prometheus metrics       | v0.0.8 | HTTP request counters/latency, Ansible playbook counters/duration, Go runtime stats       |
 | Install script           | v0.0.8 | `install.sh` — build, install, register service on Linux and FreeBSD                      |
 | Live updates (SSE)       | v0.0.2 | Server-Sent Events for pools, datasets, snapshots, I/O; falls back to REST polling        |
