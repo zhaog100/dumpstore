@@ -238,6 +238,10 @@ POST   /api/iscsi-targets      → iscsi_target_create.yml / iscsi_target_create
 DELETE /api/iscsi-targets      → iscsi_target_delete.yml / iscsi_target_delete_freebsd.yml (ansible)
 ```
 
+## Security
+
+dumpstore has no built-in authentication and runs as root. It is designed for trusted, private networks. See [SECURITY.md](SECURITY.md) for notes on TLS, plaintext passwords, and rate limiting — and the recommended mitigations for each.
+
 ## Requirements
 
 |                        | Linux                                                     | FreeBSD                                      |

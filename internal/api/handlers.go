@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -30,7 +31,8 @@ import (
 var (
 	// reZFSName matches a valid ZFS dataset/pool path: pool or pool/a/b/c
 	// Components: letters, digits, underscore, hyphen, period, colon.
-	reZFSName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.:-]*(/[a-zA-Z0-9][a-zA-Z0-9_.:-]*)*$`)
+	// Each component must begin with a letter — ZFS rejects numeric-only components like "pool/123".
+	reZFSName = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_.:-]*(/[a-zA-Z][a-zA-Z0-9_.:-]*)*$`)
 
 	// reSnapLabel matches the label part of a snapshot name (after the '@').
 	reSnapLabel = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.:-]*$`)
@@ -81,6 +83,34 @@ func validUnixNameList(s string) bool {
 		}
 	}
 	return true
+}
+
+// decodeJSON decodes a single JSON value from r.Body into v.
+// It rejects requests with trailing non-whitespace data after the JSON value.
+func decodeJSON(r *http.Request, v any) error {
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(v); err != nil {
+		return err
+	}
+	var extra json.RawMessage
+	if err := dec.Decode(&extra); err != io.EOF {
+		return fmt.Errorf("request body must contain a single JSON value")
+	}
+	return nil
+}
+
+// datasetExists reports whether a dataset with the given name exists.
+func datasetExists(name string) (bool, error) {
+	datasets, err := zfs.ListDatasets()
+	if err != nil {
+		return false, err
+	}
+	for _, d := range datasets {
+		if d.Name == name {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // apiError is returned as JSON for all non-2xx responses.
@@ -252,7 +282,7 @@ func (h *Handler) setDatasetProps(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body map[string]string
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := decodeJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
 		return
 	}
@@ -277,6 +307,15 @@ func (h *Handler) setDatasetProps(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(vars) == 1 {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("no recognised properties to update"), nil)
+		return
+	}
+	ok, err := datasetExists(name)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err, nil)
+		return
+	}
+	if !ok {
+		writeError(w, http.StatusNotFound, fmt.Errorf("dataset %q not found", name), nil)
 		return
 	}
 
@@ -314,7 +353,7 @@ func (h *Handler) createDataset(w http.ResponseWriter, r *http.Request) {
 		Copies       string `json:"copies"`
 		Xattr        string `json:"xattr"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
 		return
 	}
@@ -412,7 +451,7 @@ func (h *Handler) createSnapshot(w http.ResponseWriter, r *http.Request) {
 		SnapName  string `json:"snapname"`
 		Recursive bool   `json:"recursive"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
 		return
 	}
@@ -473,6 +512,15 @@ func (h *Handler) deleteDataset(w http.ResponseWriter, r *http.Request) {
 	}
 	if !strings.Contains(name, "/") {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("refusing to destroy a pool root"), nil)
+		return
+	}
+	ok, err := datasetExists(name)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err, nil)
+		return
+	}
+	if !ok {
+		writeError(w, http.StatusNotFound, fmt.Errorf("dataset %q not found", name), nil)
 		return
 	}
 
@@ -537,7 +585,7 @@ func (h *Handler) deleteSnapshotBatch(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Snapshots []string `json:"snapshots"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := decodeJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid JSON"), nil)
 		return
 	}
@@ -624,13 +672,20 @@ func (h *Handler) setDatasetOwnership(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
 		return
 	}
+	if ok, err := datasetExists(name); err != nil {
+		writeError(w, http.StatusInternalServerError, err, nil)
+		return
+	} else if !ok {
+		writeError(w, http.StatusNotFound, fmt.Errorf("dataset %q not found", name), nil)
+		return
+	}
 
 	var req struct {
 		Owner     string `json:"owner"`
 		Group     string `json:"group"`
 		Recursive bool   `json:"recursive"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
 		return
 	}
@@ -816,7 +871,7 @@ func (h *Handler) setSMBShare(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Sharename string `json:"sharename"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
 		return
 	}
@@ -908,7 +963,7 @@ func (h *Handler) addSambaUser(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Password string `json:"password"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
 		return
 	}
@@ -988,7 +1043,7 @@ func (h *Handler) createUser(w http.ResponseWriter, r *http.Request) {
 		CreateGroup bool   `json:"create_group"`
 		SMBUser     bool   `json:"smb_user"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
 		return
 	}
@@ -1131,7 +1186,7 @@ func (h *Handler) modifyUser(w http.ResponseWriter, r *http.Request) {
 		UserGroups string `json:"user_groups"`
 		Password   string `json:"password"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
 		return
 	}
@@ -1202,7 +1257,7 @@ func (h *Handler) createGroup(w http.ResponseWriter, r *http.Request) {
 		Groupname string `json:"groupname"`
 		GID       string `json:"gid"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
 		return
 	}
@@ -1308,7 +1363,7 @@ func (h *Handler) modifyGroup(w http.ResponseWriter, r *http.Request) {
 		GID     string `json:"gid"`
 		Members string `json:"members"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
 		return
 	}
@@ -1344,6 +1399,29 @@ func (h *Handler) modifyGroup(w http.ResponseWriter, r *http.Request) {
 	if target.GID < system.UIDMin() {
 		writeError(w, http.StatusForbidden, fmt.Errorf("refusing to modify system group (gid %d < %d)", target.GID, system.UIDMin()), nil)
 		return
+	}
+
+	if req.Members != "" {
+		users, err := system.ListUsers()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err, nil)
+			return
+		}
+		knownUsers := make(map[string]bool, len(users))
+		for _, u := range users {
+			knownUsers[u.Username] = true
+		}
+		var unknown []string
+		for _, m := range strings.Split(req.Members, ",") {
+			m = strings.TrimSpace(m)
+			if m != "" && !knownUsers[m] {
+				unknown = append(unknown, m)
+			}
+		}
+		if len(unknown) > 0 {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("unknown member(s): %s", strings.Join(unknown, ", ")), nil)
+			return
+		}
 	}
 
 	resultName := name
@@ -1397,15 +1475,46 @@ func (h *Handler) publishUserGroup() {
 // Allows letters, digits, and the small set of punctuation found in valid ACE specs:
 //   - POSIX: "user:alice:rwx", "default:group:storage:r-x"
 //   - NFSv4: "A::OWNER@:rwaDxtTnNcCoy", "A:fd:alice@localdomain:rwx"
+//
+// Per-field '@' rules (applied to each colon-separated field):
+//   - At most one '@' per field.
+//   - '@' must not be the first character of a field.
+//   - A trailing '@' is only valid when the entire prefix is uppercase letters
+//     (NFSv4 well-known principals: OWNER@, GROUP@, EVERYONE@).
 var aclSafeRe = func() func(string) bool {
 	return func(s string) bool {
+		if len(s) == 0 {
+			return false
+		}
+		// First pass: character-class check.
 		for _, c := range s {
 			if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
 				c == ':' || c == '@' || c == '-' || c == '_' || c == '.' || c == '=' || c == '/') {
 				return false
 			}
 		}
-		return len(s) > 0
+		// Second pass: validate '@' usage within each colon-separated field.
+		for _, field := range strings.Split(s, ":") {
+			atIdx := strings.Index(field, "@")
+			if atIdx == -1 {
+				continue
+			}
+			if strings.Count(field, "@") > 1 {
+				return false // e.g. "alice@@domain"
+			}
+			if atIdx == 0 {
+				return false // leading '@'
+			}
+			if atIdx == len(field)-1 {
+				// Trailing '@': only valid for all-uppercase prefixes (OWNER@, GROUP@, EVERYONE@).
+				for _, c := range field[:atIdx] {
+					if c < 'A' || c > 'Z' {
+						return false
+					}
+				}
+			}
+		}
+		return true
 	}
 }()
 
@@ -1425,8 +1534,11 @@ func (h *Handler) getACLStatus(w http.ResponseWriter, r *http.Request) {
 		}
 		// DatasetHasACL checks actual getfacl output; fall back to acltype
 		// when getfacl / nfs4_getfacl are not available.
-		hasACL := zfs.DatasetHasACL(d.Mountpoint)
-		if !hasACL {
+		hasACL, aclErr := zfs.DatasetHasACL(d.Mountpoint)
+		if aclErr != nil {
+			slog.Warn("DatasetHasACL failed, falling back to acltype", "dataset", d.Name, "err", aclErr)
+			hasACL = d.ACLType != "" && d.ACLType != "off"
+		} else if !hasACL {
 			hasACL = d.ACLType != "" && d.ACLType != "off"
 		}
 		status[d.Name] = hasACL
@@ -1467,12 +1579,19 @@ func (h *Handler) setACLEntry(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid dataset name"), nil)
 		return
 	}
+	if ok, err := datasetExists(name); err != nil {
+		writeError(w, http.StatusInternalServerError, err, nil)
+		return
+	} else if !ok {
+		writeError(w, http.StatusNotFound, fmt.Errorf("dataset %q not found", name), nil)
+		return
+	}
 
 	var req struct {
 		ACE       string `json:"ace"`
 		Recursive bool   `json:"recursive"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
 		return
 	}
@@ -1554,6 +1673,13 @@ func (h *Handler) removeACLEntry(w http.ResponseWriter, r *http.Request) {
 	}
 	if !aclSafeRe(entry) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("entry contains invalid characters"), nil)
+		return
+	}
+	if ok, err := datasetExists(name); err != nil {
+		writeError(w, http.StatusInternalServerError, err, nil)
+		return
+	} else if !ok {
+		writeError(w, http.StatusNotFound, fmt.Errorf("dataset %q not found", name), nil)
 		return
 	}
 
@@ -1819,7 +1945,7 @@ func (h *Handler) setAutoSnapshotProps(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body map[string]string
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := decodeJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid JSON"), nil)
 		return
 	}
@@ -1896,7 +2022,7 @@ func (h *Handler) createISCSITarget(w http.ResponseWriter, r *http.Request) {
 		CHAPPassword string   `json:"chap_password"`
 		Initiators   []string `json:"initiators"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err), nil)
 		return
 	}

@@ -129,7 +129,11 @@ func (r *Runner) runCore(playbook string, extraVars map[string]string, onStep fu
 	}
 
 	var steps []TaskStep
+	var lastTaskName string
 	scanner := bufio.NewScanner(stdout)
+	// Cap per-line buffer at 4 MB to prevent unbounded memory growth on runaway output.
+	const maxLineBytes = 4 * 1024 * 1024
+	scanner.Buffer(make([]byte, 64*1024), maxLineBytes)
 	for scanner.Scan() {
 		var line ndjsonLine
 		if err := json.Unmarshal(scanner.Bytes(), &line); err != nil {
@@ -137,6 +141,7 @@ func (r *Runner) runCore(playbook string, extraVars map[string]string, onStep fu
 		}
 		step := TaskStep{Name: line.Task, Status: line.Status, Msg: line.Msg}
 		steps = append(steps, step)
+		lastTaskName = line.Task
 		if onStep != nil {
 			onStep(step)
 		}
@@ -166,6 +171,9 @@ func (r *Runner) runCore(playbook string, extraVars map[string]string, onStep fu
 	if runErr != nil {
 		slog.Error("ansible-playbook exited non-zero", "playbook", playbook, "duration_ms", elapsed.Milliseconds(), "err", runErr, "stderr", stderr.String())
 		r.metrics.record(playbookLabel, elapsed, true)
+		if lastTaskName != "" {
+			return out, fmt.Errorf("ansible-playbook %s: %w (last task: %q)\nstderr: %s", playbook, runErr, lastTaskName, stderr.String())
+		}
 		return out, fmt.Errorf("ansible-playbook %s: %w\nstderr: %s", playbook, runErr, stderr.String())
 	}
 
