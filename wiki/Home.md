@@ -40,6 +40,10 @@ See [[Installation]] for detailed instructions, requirements, and configuration.
 
 dumpstore has no built-in authentication and runs as root. It is designed for trusted, private networks. Several endpoints accept passwords in the request body — without TLS these travel in plaintext. See [SECURITY.md](https://github.com/langerma/dumpstore/blob/main/SECURITY.md) for recommended mitigations (reverse proxy with TLS, SSH tunnel, VPN) and rate-limiting guidance.
 
+## Contributing
+
+Contributions are welcome. See [CONTRIBUTING.md](https://github.com/langerma/dumpstore/blob/main/CONTRIBUTING.md) for the workflow, conventions, and docs update requirements. This project follows a [Code of Conduct](https://github.com/langerma/dumpstore/blob/main/CODE_OF_CONDUCT.md).
+
 ## Pages
 
 - [[Installation]] — requirements, install script, make, manual build, service configuration

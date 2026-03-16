@@ -284,6 +284,14 @@ apt install samba
 # or manually: ansible-playbook playbooks/smb_setup.yml
 ```
 
+## Contributing
+
+Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a PR — it covers the no-external-dependencies rule, the read/write split convention, playbook and frontend standards, and the docs update requirement.
+
+Bug reports and feature requests go through the [issue tracker](https://github.com/langerma/dumpstore/issues) using the provided templates.
+
+This project follows a [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## Versioning
 
 Releases are tagged with semver (`v0.1.0`, `v0.2.0`, …). The version is injected at build time via ldflags from `git describe`:
