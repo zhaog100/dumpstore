@@ -50,6 +50,9 @@ All endpoints are served at `http://<host>:8080`. The API is JSON-over-HTTP; all
 | DELETE | `/api/scrub-schedule/{pool}`| Remove pool from periodic scrub schedule |
 | GET    | `/api/auto-snapshot/{dataset}` | Get auto-snapshot property values for a dataset |
 | PUT    | `/api/auto-snapshot/{dataset}` | Set auto-snapshot properties for a dataset |
+| GET    | `/api/iscsi-targets`           | List all iSCSI targets |
+| POST   | `/api/iscsi-targets`           | Create an iSCSI target for a zvol |
+| DELETE | `/api/iscsi-targets`           | Remove an iSCSI target |
 
 ---
 
@@ -232,6 +235,66 @@ Empty string (`""`) triggers `zfs inherit` on the property (clears the local val
   "com.sun:auto-snapshot:monthly": "3"
 }
 ```
+
+---
+
+## iSCSI targets
+
+Expose ZFS volumes as iSCSI targets. Uses `targetcli`/LIO on Linux or `ctld` on FreeBSD. Endpoints return 501 if no backend is detected.
+
+### GET /api/iscsi-targets
+
+List all iSCSI targets backed by ZFS volumes.
+
+```json
+[
+  {
+    "iqn": "iqn.2024-03.io.dumpstore:tank-vms-win11",
+    "zvol_name": "tank/vms/win11",
+    "zvol_device": "/dev/zvol/tank/vms/win11",
+    "lun": 0,
+    "portals": ["0.0.0.0:3260"],
+    "auth_mode": "none",
+    "initiators": []
+  }
+]
+```
+
+### POST /api/iscsi-targets
+
+Create an iSCSI target for a ZFS volume.
+
+```json
+{
+  "zvol": "tank/vms/win11",
+  "iqn": "iqn.2024-03.io.dumpstore:tank-vms-win11",
+  "portal_ip": "0.0.0.0",
+  "portal_port": "3260",
+  "auth_mode": "none",
+  "chap_user": "",
+  "chap_password": "",
+  "initiators": []
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `zvol` | yes | ZFS volume name, must contain `/` |
+| `iqn` | yes | RFC 3720 iSCSI Qualified Name (`iqn.YYYY-MM.domain:name`) |
+| `portal_ip` | no | Listen IP, defaults to `0.0.0.0` |
+| `portal_port` | no | Listen port, defaults to `3260` |
+| `auth_mode` | yes | `"none"` or `"chap"` |
+| `chap_user` | when chap | CHAP username |
+| `chap_password` | when chap | CHAP password |
+| `initiators` | no | Array of allowed initiator IQNs; empty = allow all |
+
+Returns Ansible task steps.
+
+### DELETE /api/iscsi-targets?iqn=\<iqn\>&zvol=\<zvol\>
+
+Remove an iSCSI target and its backstore. Both query parameters are required.
+
+Returns Ansible task steps.
 
 ---
 

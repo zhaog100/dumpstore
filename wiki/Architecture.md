@@ -44,13 +44,15 @@
       │  iostat, status, props,           datasets, snapshots,        │
       │  sysinfo, SMART, metrics,         users, groups, ACLs,        │
       │  users, groups, ACLs,             SMB users/shares/config,    │
-      │  SMB users/shares, chown          dataset chown, scrub        │
+      │  SMB users/shares, chown,         dataset chown, scrub,       │
+      │  iSCSI targets                    iSCSI targets               │
       │                                                               │
       ▼                                                               ▼
 ┌───────────────────────┐                        ┌────────────────────────────┐
 │  internal/zfs/zfs.go  │                        │ internal/ansible/runner.go │
 │  internal/system/     │                        │                            │
 │  internal/smart/      │                        │  Run(playbook, extraVars)  │
+│  internal/iscsi/      │                        │                            │
 │                       │                        │                            │
 │  ListPools()          │                        │  exec: ansible-playbook    │
 │  ListDatasets()       │                        │    -i inventory/localhost  │
@@ -65,10 +67,12 @@
 │  system.ListUsers()   │                        │                            │
 │  system.ListGroups()  │                        │                            │
 │  smart.Collect()      │                        │                            │
+│  iscsi.ListTargets()  │                        │                            │
 │                       │                        │                            │
 │  exec: zpool / zfs /  │                        │                            │
 │  smartctl / sysctl /  │                        │                            │
-│  pdbedit / net        │                        │                            │
+│  pdbedit / net /      │                        │                            │
+│  targetcli / ctld     │                        │                            │
 │  (no Python startup)  │                        │                            │
 └──────────┬────────────┘                        └────────────┬───────────────┘
            │                                                  │

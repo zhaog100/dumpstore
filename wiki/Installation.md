@@ -12,6 +12,7 @@
 | NFS sharing (optional) | `nfs-kernel-server` (Debian) or `nfs-utils` (RHEL/Fedora) | built-in base system                         |
 | SMB sharing (optional) | `samba` (`smbd`, `net`, `pdbedit`)                        | `samba` pkg                                  |
 | NFSv4 ACLs (optional)  | `nfs4-acl-tools` pkg                                      | `nfs4-acl-tools` port                        |
+| iSCSI (optional)       | `targetcli-fb` (`targetcli`)                               | built-in `ctld`                              |
 | Build                  | Go 1.22+                                                  | Go 1.22+                                     |
 
 Go and Ansible are the only hard requirements. ZFS must be available on the target machine.
@@ -40,6 +41,16 @@ systemctl enable --now nfs-server
 
 # RHEL/Fedora — ACLs
 dnf install acl nfs4-acl-tools
+
+# Debian/Ubuntu — iSCSI targets
+apt install targetcli-fb
+
+# RHEL/Fedora — iSCSI targets
+dnf install targetcli
+
+# FreeBSD — iSCSI targets (ctld is built-in, just enable the service)
+sysrc ctld_enable=YES
+service ctld start
 ```
 
 After installing Samba, run **Configure Samba** from the dumpstore UI (Users & Groups → Configure Samba) or manually:

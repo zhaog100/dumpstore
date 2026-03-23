@@ -20,6 +20,7 @@ No container runtime, no database, no Node.js. Just a single compiled binary, so
 - **Group management** — list, create, edit, and delete local groups; system groups hidden by default
 - **NFS share management** — enable, configure, and disable NFS sharing per dataset via the ZFS `sharenfs` property; cross-platform
 - **SMB share management** — create and remove Samba usershares; manage Samba users; one-click Samba setup
+- **iSCSI target management** — expose ZFS volumes as iSCSI targets via `targetcli`/LIO on Linux or `ctld` on FreeBSD; per-zvol dialog with IQN, portal IP/port, auth mode (None/CHAP), and initiator ACL list
 - **ACL management** — POSIX ACL and NFSv4 ACL entries per dataset; recursive apply supported
 - **Live updates** — Server-Sent Events push changes every 10 s; falls back to 30 s REST polling
 - **Prometheus metrics** — Go runtime, HTTP request counters/latency, Ansible playbook metrics at `GET /metrics`
