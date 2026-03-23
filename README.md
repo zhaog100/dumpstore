@@ -109,13 +109,15 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
       │  iostat, status, props,           datasets, snapshots,        │
       │  sysinfo, SMART, metrics,         users, groups, ACLs,        │
       │  users, groups, ACLs,             SMB users/shares/config,    │
-      │  SMB users/shares, chown          dataset chown               │
+      │  SMB users/shares, chown,         dataset chown, scrub,       │
+      │  iSCSI targets                    iSCSI targets               │
       │                                                               │
       ▼                                                               ▼
 ┌───────────────────────┐                        ┌────────────────────────────┐
 │  internal/zfs/zfs.go  │                        │ internal/ansible/runner.go │
 │  internal/system/     │                        │                            │
 │  internal/smart/      │                        │  Run(playbook, extraVars)  │
+│  internal/iscsi/      │                        │                            │
 │                       │                        │                            │
 │  ListPools()          │                        │  exec: ansible-playbook    │
 │  ListDatasets()       │                        │    -i inventory/localhost  │
@@ -131,6 +133,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 │  system.ListGroups()  │                        │                            │
 │  system.ListSamba*()  │                        │                            │
 │  smart.Collect()      │                        │                            │
+│  iscsi.ListTargets()  │                        │                            │
 │                       │                        │                            │
 │  exec: zpool / zfs /  │                        │                            │
 │  smartctl / sysctl /  │                        │                            │
@@ -256,6 +259,7 @@ dumpstore has no built-in authentication and runs as root. It is designed for tr
 | NFS sharing (optional) | `nfs-kernel-server` (Debian) or `nfs-utils` (RHEL/Fedora) | built-in base system                         |
 | SMB sharing (optional) | `samba` (`smbd`, `net`, `pdbedit`); for ZFS ACL passthrough via `sharesmb` also install `samba-vfs-modules` (Debian/Ubuntu) or `samba-vfs` (RHEL/Fedora) | `samba` pkg |
 | NFSv4 ACLs (optional)  | `nfs4-acl-tools` pkg (`nfs4_getfacl`/`nfs4_setfacl`)      | `nfs4-acl-tools` port                        |
+| iSCSI (optional)       | `targetcli-fb` (`targetcli`)                               | built-in `ctld`                              |
 | Build                  | Go 1.22+                                                  | Go 1.22+                                     |
 
 Go and Ansible are the only hard requirements. ZFS must be available on the target machine; the binary itself builds and runs on any platform.
@@ -284,6 +288,16 @@ dnf install acl nfs4-acl-tools
 apt install samba
 # Then run the SMB setup from the dumpstore UI (Settings → Configure Samba)
 # or manually: ansible-playbook playbooks/smb_setup.yml
+
+# Debian/Ubuntu — iSCSI targets
+apt install targetcli-fb
+
+# RHEL/Fedora — iSCSI targets
+dnf install targetcli
+
+# FreeBSD — iSCSI targets (ctld is built-in, just enable the service)
+sysrc ctld_enable=YES
+service ctld start
 ```
 
 ## Contributing
@@ -395,6 +409,7 @@ sudo make uninstall
 │   ├── broker/broker.go             # Thread-safe pub/sub broker (Subscribe/Publish/Unsubscribe)
 │   ├── broker/poller.go             # Background poller (ZFS + users/groups) → publishes changes to broker
 │   ├── system/system.go             # Host + process info, ListUsers, ListGroups (/proc, /etc/passwd, /etc/group)
+│   ├── iscsi/iscsi.go              # iSCSI target listing (targetcli on Linux, ctld on FreeBSD)
 │   └── smart/smart.go              # S.M.A.R.T. data via smartctl
 ├── playbooks/
 │   ├── inventory/localhost          # Local connection inventory
@@ -417,7 +432,11 @@ sudo make uninstall
 │   ├── smb_usershare_set.yml        # Create/update a Samba usershare for a dataset
 │   ├── smb_usershare_unset.yml      # Remove a Samba usershare
 │   ├── smb_user_add.yml             # Add a local user to smbpasswd
-│   └── smb_user_remove.yml          # Remove a user from smbpasswd
+│   ├── smb_user_remove.yml          # Remove a user from smbpasswd
+│   ├── iscsi_target_create.yml      # Create iSCSI target (Linux/targetcli)
+│   ├── iscsi_target_delete.yml      # Remove iSCSI target (Linux/targetcli)
+│   ├── iscsi_target_create_freebsd.yml  # Create iSCSI target (FreeBSD/ctld)
+│   └── iscsi_target_delete_freebsd.yml  # Remove iSCSI target (FreeBSD/ctld)
 ├── images/                          # Logo source files (SVG, all variants)
 ├── static/
 │   ├── index.html                   # Single-page application shell + dialogs
@@ -472,6 +491,9 @@ sudo make uninstall
 | POST   | `/api/smb-users/{name}`     | Add a user to smbpasswd               |
 | DELETE | `/api/smb-users/{name}`     | Remove a user from smbpasswd          |
 | POST   | `/api/smb-config/pam`       | Run Samba setup playbook              |
+| GET    | `/api/iscsi-targets`        | List all iSCSI targets                |
+| POST   | `/api/iscsi-targets`        | Create an iSCSI target for a zvol     |
+| DELETE | `/api/iscsi-targets`        | Remove an iSCSI target                |
 
 ### POST /api/datasets
 
@@ -575,6 +597,53 @@ Remove an ACL entry. The `entry` query parameter is:
 - **NFSv4**: full ACE string to match and remove
 
 Append `&recursive=true` (POSIX only) to remove recursively.
+
+### GET /api/iscsi-targets
+
+List all iSCSI targets backed by ZFS volumes. Uses `targetcli` saveconfig on Linux or `/etc/ctl.conf` on FreeBSD. Returns an empty array if no backend is installed.
+
+```json
+[
+  {
+    "iqn": "iqn.2024-03.io.dumpstore:tank-vms-win11",
+    "zvol_name": "tank/vms/win11",
+    "zvol_device": "/dev/zvol/tank/vms/win11",
+    "lun": 0,
+    "portals": ["0.0.0.0:3260"],
+    "auth_mode": "none",
+    "initiators": []
+  }
+]
+```
+
+### POST /api/iscsi-targets
+
+Create an iSCSI target for a ZFS volume. Auto-selects the appropriate playbook based on platform (`targetcli` on Linux, `ctld` on FreeBSD). Returns 501 if no backend is detected.
+
+```json
+{
+  "zvol": "tank/vms/win11",
+  "iqn": "iqn.2024-03.io.dumpstore:tank-vms-win11",
+  "portal_ip": "0.0.0.0",
+  "portal_port": "3260",
+  "auth_mode": "none",
+  "chap_user": "",
+  "chap_password": "",
+  "initiators": []
+}
+```
+
+- `zvol` (required): ZFS volume name, must contain `/`
+- `iqn` (required): RFC 3720 iSCSI Qualified Name (`iqn.YYYY-MM.domain:name`)
+- `portal_ip`: listen IP, defaults to `0.0.0.0`
+- `portal_port`: listen port, defaults to `3260`
+- `auth_mode`: `"none"` or `"chap"`
+- `chap_user` / `chap_password`: required when `auth_mode` is `"chap"`
+- `initiators`: array of allowed initiator IQNs; empty array = allow all
+
+### DELETE /api/iscsi-targets?iqn=\<iqn\>&zvol=\<zvol\>
+
+Remove an iSCSI target and its backstore. Both query parameters are required.
 
 ### GET /api/events
 
