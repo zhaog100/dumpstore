@@ -25,6 +25,15 @@ No container runtime, no database, no Node.js. Just a single compiled binary, so
 - **Live updates** — Server-Sent Events push changes every 10 s; falls back to 30 s REST polling
 - **Prometheus metrics** — Go runtime, HTTP request counters/latency, Ansible playbook metrics at `GET /metrics`
 
+## Planned
+
+- **User mgmt extensions** — SSH key management (`authorized_keys`), move home directory
+- **Samba home shares** — enable/configure `[homes]` section in `smb.conf` for per-user home directory shares
+- **Time Machine shares** — Samba `vfs_fruit` share configuration for macOS Time Machine backups over SMB
+- **ZFS native encryption** — load/unload keys, encryption status per dataset, keyformat/keylocation support
+- **Pool import/export** — import available pools from attached devices; export pools safely
+- **ZFS send/receive** — pool replication and off-site backup
+
 ## Quick start
 
 ```bash

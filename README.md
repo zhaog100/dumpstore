@@ -694,6 +694,9 @@ The browser UI uses `EventSource` to subscribe to all eight topics and falls bac
 | Pool import/export       | Import available pools from attached devices; export pools safely                             |
 | Snapshot diff            | Show files changed between two snapshots (`zfs diff`)                                         |
 | Per-user quota tracking  | Show space usage per user/group (`zfs userspace` / `zfs groupspace`)                          |
+| User mgmt extensions     | SSH key management (`authorized_keys`), move home directory                                   |
+| Samba home shares        | Enable/configure `[homes]` section in `smb.conf` for per-user home directory shares           |
+| Time Machine shares      | Samba `vfs_fruit` share configuration for macOS Time Machine backups over SMB                  |
 | ZFS send/receive         | Pool replication and off-site backup                                                          |
 | Alerts                   | Configurable thresholds for pool health, disk temp, capacity                                  |
 | ~~Pool scrub management~~| ~~Trigger scrubs, view last scrub time/status/progress, schedule periodic scrubs~~ — **done** (start/cancel + periodic schedule; Linux `zfsutils-linux`, FreeBSD `periodic.conf`) |
