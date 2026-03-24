@@ -41,6 +41,9 @@
 | Pool create/import/export| High     | Import available pools from attached devices; export pools safely                |
 | Snapshot diff            | Medium   | Show files changed between two snapshots (`zfs diff`)                            |
 | Per-user quota tracking  | Medium   | Space usage per user/group (`zfs userspace` / `zfs groupspace`)                  |
+| User mgmt extensions     | Medium   | SSH key management (`authorized_keys`), move home directory                      |
+| Samba home shares        | Medium   | Enable/configure `[homes]` section in `smb.conf` for per-user home dir shares   |
+| Time Machine shares      | Medium   | Samba `vfs_fruit` share config for macOS Time Machine backups over SMB           |
 | ZFS send/receive         | Low      | Pool replication and off-site backup                                             |
 | Alerts                   | Low      | Configurable thresholds for pool health, disk temp, capacity                     |
 
