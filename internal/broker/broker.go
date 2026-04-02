@@ -37,16 +37,16 @@ func New() *Broker {
 }
 
 // Subscribe registers a new subscriber for topic and returns a buffered channel
-// (size 8) that receives JSON-encoded payloads. If a cached value exists for the
+// (size 64) that receives JSON-encoded payloads. If a cached value exists for the
 // topic it is written to the channel immediately so the caller gets current state
 // without waiting for the next poll cycle. The caller must call Unsubscribe when
 // done to avoid a goroutine/channel leak.
 func (b *Broker) Subscribe(topic string) chan []byte {
-	ch := make(chan []byte, 8)
+	ch := make(chan []byte, 64)
 	b.mu.Lock()
 	b.subs[topic] = append(b.subs[topic], ch)
 	if cached, ok := b.cache[topic]; ok {
-		ch <- cached // non-blocking: buffer is 8, channel is brand-new
+		ch <- cached // non-blocking: buffer is 64, channel is brand-new
 	}
 	b.mu.Unlock()
 	return ch
@@ -68,31 +68,43 @@ func (b *Broker) Unsubscribe(topic string, ch chan []byte) {
 	}
 }
 
+// publishLocked delivers payload to every subscriber of topic, closing and
+// removing any whose buffer is full. Must be called with b.mu held.
+// Sends are non-blocking (select/default) so holding the lock is safe.
+func (b *Broker) publishLocked(topic string, payload []byte) {
+	subs := b.subs[topic]
+	n := 0
+	for _, ch := range subs {
+		select {
+		case ch <- payload:
+			subs[n] = ch
+			n++
+		default:
+			slog.Warn("broker: subscriber slow, closing connection", "topic", topic)
+			close(ch)
+		}
+	}
+	// Clear dropped slots to avoid memory leaks, then trim the slice.
+	for i := n; i < len(subs); i++ {
+		subs[i] = nil
+	}
+	b.subs[topic] = subs[:n]
+}
+
 // Publish JSON-encodes data, updates the per-topic cache, and delivers the
 // payload to every current subscriber. The send is non-blocking: if a
-// subscriber's buffer is full the message is dropped for that subscriber so
-// the caller is never stalled.
+// subscriber's buffer is full the subscriber is dropped (its channel closed)
+// so the caller is never stalled and the client is forced to reconnect.
 func (b *Broker) Publish(topic string, data any) {
 	payload, err := json.Marshal(data)
 	if err != nil {
 		slog.Error("broker: marshal failed", "topic", topic, "err", err)
 		return
 	}
-	// Update cache and snapshot subscriber list under the same lock so a
-	// Subscribe call racing with Publish cannot miss the update.
 	b.mu.Lock()
+	defer b.mu.Unlock()
 	b.cache[topic] = payload
-	snapshot := make([]chan []byte, len(b.subs[topic]))
-	copy(snapshot, b.subs[topic])
-	b.mu.Unlock()
-
-	for _, ch := range snapshot {
-		select {
-		case ch <- payload:
-		default:
-			slog.Warn("broker: subscriber slow, dropping message", "topic", topic)
-		}
-	}
+	b.publishLocked(topic, payload)
 }
 
 // PublishNoCache delivers data to current subscribers without updating the cache.
@@ -105,15 +117,6 @@ func (b *Broker) PublishNoCache(topic string, data any) {
 		return
 	}
 	b.mu.Lock()
-	snapshot := make([]chan []byte, len(b.subs[topic]))
-	copy(snapshot, b.subs[topic])
-	b.mu.Unlock()
-
-	for _, ch := range snapshot {
-		select {
-		case ch <- payload:
-		default:
-			slog.Warn("broker: subscriber slow, dropping message", "topic", topic)
-		}
-	}
+	defer b.mu.Unlock()
+	b.publishLocked(topic, payload)
 }
