@@ -30,6 +30,8 @@
 | iSCSI target management  | v0.1.4 | Expose zvols as iSCSI targets (`targetcli`/LIO on Linux, `ctld` on FreeBSD); dialog with IQN, portal, CHAP auth, initiator ACLs |
 | SMB home shares          | v0.1.5 | Enable/configure `[homes]` section in `smb.conf`; dataset picker or custom path; per-user auto-shares                           |
 | Time Machine shares      | v0.1.6 | Samba `vfs_fruit` Time Machine backup targets; named shares backed by ZFS datasets; configurable max size and valid users         |
+| User mgmt extensions     | v0.1.7 | SSH authorized key add/remove, home directory change with optional file migration, Samba password sync on edit                    |
+| Request ID correlation   | v0.1.8 | Per-request `req_id` on all log lines; reads `X-Request-ID` from upstream proxies (nginx, Traefik) and echoes it back on response |
 
 ---
 
@@ -43,7 +45,6 @@
 | Pool create/import/export| High     | Import available pools from attached devices; export pools safely                |
 | Snapshot diff            | Medium   | Show files changed between two snapshots (`zfs diff`)                            |
 | Per-user quota tracking  | Medium   | Space usage per user/group (`zfs userspace` / `zfs groupspace`)                  |
-| ~~User mgmt extensions~~ | ~~Medium~~ | ~~SSH key management (`authorized_keys`), home directory change with optional move — in progress~~ |
 | ZFS send/receive         | Low      | Pool replication and off-site backup                                             |
 | Alerts                   | Low      | Configurable thresholds for pool health, disk temp, capacity                     |
 
