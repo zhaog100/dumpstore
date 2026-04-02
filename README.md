@@ -21,6 +21,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 
 - **System info** — hostname, OS, kernel, CPU, uptime, load averages, process stats
 - **Pool overview** — health badges, usage bars, fragmentation, deduplication ratio, vdev tree
+- **Pool scrub management** — trigger and cancel scrubs; last scrub time, status, and progress per pool; configure periodic scrub schedules (Linux: `zfsutils-linux`; FreeBSD: `periodic.conf`)
 - **I/O statistics** — live read/write IOPS and bandwidth per pool
 - **Disk health** — S.M.A.R.T. data per drive (temperature, power-on hours, reallocated sectors, pending sectors, uncorrectable errors)
 - **Dataset browser** — depth-indented collapsible tree, compression, quota, mountpoint; ACL, NFS, and SMB buttons light up when configured
@@ -28,6 +29,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **Dataset editing** — update properties in place (set or inherit)
 - **Dataset deletion** — destroy datasets and volumes with recursive option and confirm-by-typing dialog
 - **Snapshot management** — list, create (recursive), and delete snapshots; all deletions use a styled confirm dialog
+- **Auto-snapshot scheduling** — manage `com.sun:auto-snapshot*` ZFS properties per dataset; integrates with `zfs-auto-snapshot` (Linux) and `zfstools` (FreeBSD) for configurable hourly/daily/weekly/monthly rotation
 - **User management** — list, create, edit (shell, password, primary/supplementary groups, home directory, SSH authorized keys, Samba password sync), and delete local users; system users (uid < 1000) hidden by default with a toggle to reveal them
 - **Group management** — list, create, edit (name, GID, members), and delete local groups; system groups hidden by default with the same toggle
 - **NFS share management** — enable, configure, and disable NFS sharing per dataset via the ZFS `sharenfs` property; cross-platform (Linux and FreeBSD)
@@ -38,6 +40,7 @@ If you run a Helios64, an old server, or any ZFS box where you care about what i
 - **ACL management** — view, add, and remove POSIX ACL entries (`getfacl`/`setfacl`, requires `acl` package) and NFSv4 ACL entries (`nfs4_getfacl`/`nfs4_setfacl`, requires `nfs4-acl-tools`) per dataset; setting an ACL entry automatically sets the correct `acltype` ZFS property; one-click enable for datasets with `acltype=off`; recursive apply supported for POSIX
 - **Live updates** — Server-Sent Events push pool, dataset, snapshot, I/O, user and group changes; server polls every 10 s and pushes only on change; falls back to 30 s REST polling if SSE is unavailable
 - **Prometheus metrics** — `GET /metrics` exposes Go runtime and process stats, HTTP request counters and latency histograms (`http_requests_total`, `http_request_duration_seconds`), and Ansible playbook metrics (`ansible_runs_total`, `ansible_run_duration_seconds`)
+- **Request ID correlation** — every request gets a unique `req_id` carried on all log lines for that request; reads `X-Request-ID` from upstream proxies (nginx, Traefik) and echoes it back on the response
 
 ## Screenshots
 
@@ -727,7 +730,7 @@ The browser UI uses `EventSource` to subscribe to all eight topics and falls bac
 | Pool import/export       | Import available pools from attached devices; export pools safely                             |
 | Snapshot diff            | Show files changed between two snapshots (`zfs diff`)                                         |
 | Per-user quota tracking  | Show space usage per user/group (`zfs userspace` / `zfs groupspace`)                          |
-| User mgmt extensions     | SSH key management (`authorized_keys`), move home directory                                   |
+| ~~User mgmt extensions~~ | ~~SSH key management (`authorized_keys`), move home directory~~ — **done** (SSH authorized key add/remove, home directory change with optional file migration, Samba password sync on edit) |
 | ~~Samba home shares~~    | ~~Enable/configure `[homes]` section in `smb.conf` for per-user home directory shares~~ — **done** (enable/disable `[homes]` section; configurable base path, browseable, read only, create/directory masks) |
 | ~~Time Machine shares~~  | ~~Samba `vfs_fruit` share configuration for macOS Time Machine backups over SMB~~ — **done** (named shares backed by ZFS datasets; configurable max size and valid users; `vfs_fruit` with catia and streams_xattr) |
 | ZFS send/receive         | Pool replication and off-site backup                                                          |
