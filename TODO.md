@@ -42,7 +42,7 @@
 
 - [x] **`broker.go`: SSE subscriber channel is only 8 deep; slow clients silently drop messages** — `internal/broker/broker.go` allocates a `chan []byte` of capacity 8 per subscriber. When a client is slow the channel fills and new events are dropped with a warn log only. The frontend never knows it missed an update and shows stale state. Either increase the buffer, close lagging subscribers, or add a sequence number so the client can detect a gap and force a full refresh.
 
-- [ ] **`handlers.go`: `createISCSITarget` allows CHAP password through `safePropertyValue` but user/SMB passwords don't** — Inconsistency: iSCSI CHAP password is validated with `safePropertyValue` (`handlers.go:2061`) but Unix and SMB passwords are not. Unify by running all password fields through the same validator.
+- [x] **`handlers.go`: `createISCSITarget` allows CHAP password through `safePropertyValue` but user/SMB passwords don't** — Inconsistency: iSCSI CHAP password is validated with `safePropertyValue` (`handlers.go:2061`) but Unix and SMB passwords are not. Unify by running all password fields through the same validator.
 
 ## Low (round 2)
 
