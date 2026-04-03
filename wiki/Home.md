@@ -28,6 +28,7 @@ No container runtime, no database, no Node.js. Just a single compiled binary, so
 - **Live updates** — Server-Sent Events push changes every 10 s; falls back to 30 s REST polling
 - **Prometheus metrics** — Go runtime, HTTP request counters/latency, Ansible playbook metrics at `GET /metrics`
 - **Request ID correlation** — every request gets a unique `req_id` on all log lines; reads `X-Request-ID` from upstream proxies (nginx, Traefik) and echoes it back on the response
+- **Authentication** — session-based login with bcrypt password stored in `/etc/dumpstore/dumpstore.conf`; `--set-password` CLI; per-IP rate limiting; reverse proxy delegation via `X-Remote-User` from configured trusted CIDRs; logout button and username badge in the header
 
 ## Planned
 
@@ -49,7 +50,9 @@ See [[Installation]] for detailed instructions, requirements, and configuration.
 
 ## Security
 
-dumpstore has no built-in authentication and runs as root. It is designed for trusted, private networks. Several endpoints accept passwords in the request body — without TLS these travel in plaintext. See [SECURITY.md](https://github.com/langerma/dumpstore/blob/main/SECURITY.md) for recommended mitigations (reverse proxy with TLS, SSH tunnel, VPN) and rate-limiting guidance.
+dumpstore has built-in session-based authentication. Set a password during install (the script prompts automatically) or at any time with `--set-password`. If no password is configured the service binds to `127.0.0.1` only.
+
+dumpstore runs as root (required for ZFS). See [SECURITY.md](https://github.com/langerma/dumpstore/blob/main/SECURITY.md) for notes on TLS and the recommended deployment topology.
 
 ## Contributing
 

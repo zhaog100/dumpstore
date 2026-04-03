@@ -63,7 +63,7 @@ ansible-playbook playbooks/smb_setup.yml
 
 ## Install script (recommended)
 
-Clone the repository and run `install.sh` as root. It checks prerequisites, builds the binary, installs everything to `/usr/local/lib/dumpstore/`, and registers the service.
+Clone the repository and run `install.sh` as root. It checks prerequisites, builds the binary, installs everything to `/usr/local/lib/dumpstore/`, **prompts for an admin password**, and registers the service.
 
 ```bash
 git clone https://github.com/langerma/dumpstore.git
@@ -90,6 +90,60 @@ sudo make install
 ```
 
 `make install` detects the OS automatically and registers the appropriate service. The service will be available at `http://localhost:8080`.
+
+---
+
+## Authentication
+
+dumpstore uses session-based login. The password is stored as a bcrypt hash in `/etc/dumpstore/dumpstore.conf`.
+
+### Set or reset the password
+
+```bash
+sudo /usr/local/lib/dumpstore/dumpstore --set-password --config /etc/dumpstore/dumpstore.conf
+sudo systemctl restart dumpstore   # Linux
+# service dumpstore restart        # FreeBSD
+```
+
+The prompt reads from `/dev/tty` so it works correctly even when stdin is piped.
+
+### No password configured
+
+If the config file is missing or has no `password_hash`, the service starts but **binds to `127.0.0.1:8080` only** and logs a warning. Run `--set-password` and restart to enable public binding.
+
+### Config file reference
+
+`/etc/dumpstore/dumpstore.conf` (created with mode `0600`):
+
+```json
+{
+  "username": "admin",
+  "password_hash": "$2a$12$...",
+  "session_ttl": "24h",
+  "trusted_proxies": [],
+  "unprotected_paths": ["/metrics"]
+}
+```
+
+| Field | Default | Description |
+|---|---|---|
+| `username` | `admin` | Login username |
+| `password_hash` | — | bcrypt hash (cost 12); set via `--set-password` |
+| `session_ttl` | `24h` | How long a session cookie stays valid |
+| `trusted_proxies` | `[]` | CIDRs from which `X-Remote-User` header is trusted |
+| `unprotected_paths` | `["/metrics"]` | Paths that bypass auth (prefix match) |
+
+### Reverse proxy delegation
+
+For setups behind nginx, Caddy, Traefik, or Authelia:
+
+1. Add the proxy's CIDR to `trusted_proxies`
+2. Configure your proxy to set `X-Remote-User: <username>` after SSO authentication
+3. dumpstore will accept that header as the authenticated identity — no password login required from those IPs
+
+### Change password or username in the UI
+
+Go to **Users & Groups → Authentication** and use the Change Password or Change Username dialogs. Both operations go through Ansible and show the operation log.
 
 ---
 
