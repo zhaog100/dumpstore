@@ -265,9 +265,40 @@ POST   /api/iscsi-targets      → iscsi_target_create.yml / iscsi_target_create
 DELETE /api/iscsi-targets      → iscsi_target_delete.yml / iscsi_target_delete_freebsd.yml (ansible)
 ```
 
+## Authentication
+
+dumpstore has built-in session-based authentication.
+
+**First-time setup:** `install.sh` prompts for a password before starting the service. On subsequent upgrades the prompt is skipped if a password is already set.
+
+To set or reset the password manually:
+
+```bash
+sudo /usr/local/lib/dumpstore/dumpstore --set-password --config /etc/dumpstore/dumpstore.conf
+sudo systemctl restart dumpstore
+```
+
+If no password is configured the service starts but **binds to `127.0.0.1` only** with a warning in the logs.
+
+**Configuration** (`/etc/dumpstore/dumpstore.conf`, JSON):
+
+```json
+{
+  "username": "admin",
+  "password_hash": "$2a$12$...",
+  "session_ttl": "24h",
+  "trusted_proxies": ["127.0.0.1/32"],
+  "unprotected_paths": ["/metrics"]
+}
+```
+
+**Reverse proxy delegation:** If you run dumpstore behind nginx, Caddy, or Authelia, configure the proxy's CIDR in `trusted_proxies` and set the `X-Remote-User` header from your SSO. dumpstore will accept that header as the authenticated identity without requiring a password login.
+
+**In-app settings:** Username and password can be changed from the Authentication section at the top of the Users & Groups tab. Both operations go through Ansible and show the operation log.
+
 ## Security
 
-dumpstore has no built-in authentication and runs as root. It is designed for trusted, private networks. See [SECURITY.md](SECURITY.md) for notes on TLS, plaintext passwords, and rate limiting — and the recommended mitigations for each.
+dumpstore runs as root (required for ZFS). See [SECURITY.md](SECURITY.md) for notes on TLS and the recommended deployment topology.
 
 ## Requirements
 
