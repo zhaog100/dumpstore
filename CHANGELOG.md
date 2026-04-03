@@ -6,6 +6,7 @@ All notable changes to this project will be documented here.
 
 ### Added
 - **Code of Conduct**, **Contributing guidelines**, and **GitHub issue templates** (bug report + feature request) — community health score to 100%
+- **Feature roadmap** — full planned feature backlog tracked in `FEATURES.md` with linked GitHub issues; covers authentication, TLS, UPS/NUT, drive replacement, scheduled replication, pool lifecycle, UI overhaul, lldap integration, and more ([#20](https://github.com/langerma/dumpstore/issues/20), [#21](https://github.com/langerma/dumpstore/issues/21)–[#27](https://github.com/langerma/dumpstore/issues/27), [#49](https://github.com/langerma/dumpstore/issues/49)–[#63](https://github.com/langerma/dumpstore/issues/63))
 
 ### Fixed
 - Critical scanner buffer exhaustion under high Ansible output — raised from 64 KB to 4 MB
