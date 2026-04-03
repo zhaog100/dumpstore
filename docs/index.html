@@ -713,7 +713,8 @@ cd dumpstore
 sudo ./install.sh</pre>
         <p class="install-note">
           The script checks prerequisites, compiles the binary, copies everything to
-          <code>/usr/local/lib/dumpstore/</code>, and registers the service —
+          <code>/usr/local/lib/dumpstore/</code>, prompts for an admin password,
+          then registers and starts the service —
           systemd on Linux, rc.d on FreeBSD.
         </p>
       </div>
@@ -724,7 +725,7 @@ sudo ./install.sh</pre>
           <h3>open the UI</h3>
         </div>
         <pre>http://localhost:8080</pre>
-        <p class="install-note">The service starts automatically after install.</p>
+        <p class="install-note">Sign in with the password you set during install. Change it any time from the Authentication section in the Users &amp; Groups tab.</p>
       </div>
 
       <div class="install-card">
