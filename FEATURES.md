@@ -39,13 +39,15 @@
 
 | Feature                  | Priority | Notes                                                                            |
 |--------------------------|----------|----------------------------------------------------------------------------------|
-| ZFS native encryption    | High     | Load/unload keys, encryption status per dataset, keyformat/keylocation support   |
+| OpenTelemetry            | Low      | Full OTEL instrumentation: traces (HTTP, Ansible runner, ZFS execs), metrics (bridge existing Prometheus counters), logs (slog → OTEL exporter). Deferred until a collector (Jaeger, Grafana Tempo/Loki/Mimir) is available. |
+| ZFS native encryption    | Low      | Load/unload keys, encryption status per dataset, keyformat/keylocation support. **Deferred until auth/TLS layer exists** — passphrase over plaintext HTTP is too risky. |
 | Dataset rename           | Medium   | Rename a dataset or volume in place                                              |
 | Snapshot clone           | Medium   | Create a new dataset from an existing snapshot                                   |
-| Pool create/import/export| High     | Import available pools from attached devices; export pools safely                |
+| Pool create/import/export| High     | Create pools (mirror, raidz1/2/3, draid) from available block devices; import importable pools; export pools safely |
 | Snapshot diff            | Medium   | Show files changed between two snapshots (`zfs diff`)                            |
 | Per-user quota tracking  | Medium   | Space usage per user/group (`zfs userspace` / `zfs groupspace`)                  |
 | ZFS send/receive         | Low      | Pool replication and off-site backup                                             |
+| Dataset rewrite          | Medium   | Rewrite existing file blocks to apply updated dataset properties (compression, checksum, dedup, copies) to already-stored data via `zfs rewrite`; options for recursive, skip-snapshot-shared blocks (`-S`), skip-clone-shared blocks (`-C`) |
 | Alerts                   | Low      | Configurable thresholds for pool health, disk temp, capacity                     |
 
 ---
