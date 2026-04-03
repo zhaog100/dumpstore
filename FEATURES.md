@@ -37,18 +37,30 @@
 
 ## Planned
 
-| Feature                  | Priority | Notes                                                                            |
-|--------------------------|----------|----------------------------------------------------------------------------------|
-| OpenTelemetry            | Low      | Full OTEL instrumentation: traces (HTTP, Ansible runner, ZFS execs), metrics (bridge existing Prometheus counters), logs (slog → OTEL exporter). Deferred until a collector (Jaeger, Grafana Tempo/Loki/Mimir) is available. |
-| ZFS native encryption    | Low      | Load/unload keys, encryption status per dataset, keyformat/keylocation support. **Deferred until auth/TLS layer exists** — passphrase over plaintext HTTP is too risky. |
-| Dataset rename           | Medium   | Rename a dataset or volume in place                                              |
-| Snapshot clone           | Medium   | Create a new dataset from an existing snapshot                                   |
-| Pool create/import/export| High     | Create pools (mirror, raidz1/2/3, draid) from available block devices; import importable pools; export pools safely |
-| Snapshot diff            | Medium   | Show files changed between two snapshots (`zfs diff`)                            |
-| Per-user quota tracking  | Medium   | Space usage per user/group (`zfs userspace` / `zfs groupspace`)                  |
-| ZFS send/receive         | Low      | Pool replication and off-site backup                                             |
-| Dataset rewrite          | Medium   | Rewrite existing file blocks to apply updated dataset properties (compression, checksum, dedup, copies) to already-stored data via `zfs rewrite`; options for recursive, skip-snapshot-shared blocks (`-S`), skip-clone-shared blocks (`-C`) |
-| Alerts                   | Low      | Configurable thresholds for pool health, disk temp, capacity                     |
+| Feature                    | Priority | Issue | Notes                                                                            |
+|----------------------------|----------|-------|----------------------------------------------------------------------------------|
+| Authentication             | High     | #51   | Session-based login + reverse proxy `X-Remote-User` delegation                   |
+| TLS / HTTPS                | High     | #52   | Self-signed auto-gen, custom cert, optional ACME/Let's Encrypt                   |
+| UPS / NUT integration      | High     | #53   | UPS status display; graceful shutdown on low battery via `upsc`                  |
+| Drive replacement          | High     | #56   | Replace faulted disks, monitor resilver progress, offline/online devices          |
+| Scheduled replication      | High     | #54   | Cron-based ZFS send/receive jobs with retention; depends on #26                  |
+| Pool create/import/export  | High     | #23   | Create pools (mirror, raidz1/2/3, draid); import/export existing pools           |
+| Dataset rename             | Medium   | #21   | Rename a dataset or volume in place                                               |
+| Snapshot clone             | Medium   | #22   | Create a new dataset from an existing snapshot                                    |
+| Snapshot scheduling UI     | Medium   | #55   | Manage auto-snapshot schedules and retention per dataset                          |
+| Pool expansion             | Medium   | #57   | Add vdevs, cache (L2ARC), log (SLOG), and spare devices to existing pools        |
+| Dataset rewrite            | Medium   | #50   | Rewrite existing blocks to apply updated properties (compression, checksum, dedup) via `zfs rewrite`; exposed in Edit Dataset dialog |
+| Snapshot diff              | Medium   | #24   | Show files changed between two snapshots (`zfs diff`)                            |
+| Per-user quota tracking    | Medium   | #25   | Space usage per user/group (`zfs userspace` / `zfs groupspace`)                  |
+| Service management         | Medium   | #58   | Start/stop/restart/enable Samba, NFS, iSCSI from the UI                          |
+| Network interface overview | Medium   | #59   | IP addresses, link state, speed — read-only, shown in Sysinfo tab                |
+| Log viewer                 | Medium   | #60   | Tail dumpstore logs, system journal, and ZFS events from the UI                  |
+| lldap integration          | Medium   | #61   | LDAP auth via lldap; Samba passthrough; user/group sync display                  |
+| ZFS send/receive           | Low      | #26   | One-shot pool replication; local and remote (SSH)                                |
+| Alerts                     | Low      | #27   | Thresholds for pool health, disk temp, capacity; email/webhook delivery           |
+| Historical I/O graphs      | Low      | #62   | In-memory ring buffer; sparkline charts per pool; 5m/15m/1h range                |
+| ZFS native encryption      | Low      | #20   | Load/unload keys, keystatus display. **Deferred until #51 + #52 land**           |
+| OpenTelemetry              | Low      | #49   | Traces, metrics, logs. **Deferred until collector infra available**               |
 
 ---
 
