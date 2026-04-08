@@ -43,13 +43,38 @@ func handleLogin(cfg *Config, store *SessionStore, rl *RateLimiter) http.Handler
 		username := r.FormValue("username")
 		password := r.FormValue("password")
 
-		valid := username == cfg.Username &&
-			cfg.PasswordHash != "" &&
-			bcrypt.CompareHashAndPassword([]byte(cfg.PasswordHash), []byte(password)) == nil
+		// Check credentials - supports both bcrypt and argon2id
+		var valid bool
+		var needsMigration bool
+
+		if username == cfg.Username && cfg.PasswordHash != "" {
+			// Try argon2id first
+			if IsArgon2idHash(cfg.PasswordHash) {
+				err := VerifyPasswordArgon2id(password, cfg.PasswordHash)
+				valid = (err == nil)
+			} else {
+				// Fallback to bcrypt
+				err := bcrypt.CompareHashAndPassword([]byte(cfg.PasswordHash), []byte(password))
+				valid = (err == nil)
+				needsMigration = valid // Mark for migration
+			}
+		}
 
 		if !valid {
 			http.Redirect(w, r, "/login?error=Invalid+username+or+password.", http.StatusFound)
 			return
+		}
+
+		// Lazy migration: re-hash with argon2id if using bcrypt
+		if needsMigration {
+			newHash, err := HashPasswordArgon2id(password)
+			if err == nil {
+				cfg.PasswordHash = newHash
+				// Save asynchronously (ignore errors)
+				go func() {
+					_ = SaveConfig("config.json", cfg)
+				}()
+			}
 		}
 
 		token := store.Create()
